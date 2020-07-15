@@ -21,11 +21,12 @@ extern "C" {
 	// Initialization
 	Ipp64f** init_windows(void);
 	void init_globalvar();
-	ERR_STATUS createFFT(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order);
+	ERR_STATUS createFFT_IPP(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order);
+	ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen);
 	ERR_STATUS createFilter(IppsFIRSpec_64f** pSpec, IppFilterType filterType, double* rFreq, int tapsLen, IppWinType windowType);
 
 	// Processing
-	ERR_STATUS spectrogram(Ipp64f* data, int dataLen, Ipp64f** output, Ipp64f* window, int wlen, int overlap);
+	ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* window, int wlen, int overlap, int bits);
 	ERR_STATUS threshold();
 	ERR_STATUS constant_freq();
 

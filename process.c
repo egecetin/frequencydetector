@@ -58,10 +58,10 @@ cleanup:
 }
 
 /** ##############################################################################################################
-	Create FFT context for calculation.
+	Create FFT context for calculation (IPP Based).
 
 	Notes;
-		Multiply with 1/N at forward transform.
+		Multiply with 1/N at forward transform. Data length can only equal to powers of two.
 
 	Input;
 		fft		: FFT context
@@ -70,7 +70,7 @@ cleanup:
 	Output;
 		retval	: Error status
 */
-ERR_STATUS createFFT(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order)
+ERR_STATUS createFFT_IPP(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order)
 {
 	ERR_STATUS status = ippStsNoErr;
 	int buffSize = 0, specSize = 0, specbuffSize = 0;
@@ -101,6 +101,33 @@ ERR_STATUS createFFT(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order)
 	ippFree(arrSpecBuff);
 
 	return status;
+}
+
+/** ##############################################################################################################
+	Create FFT context for calculation (MKL Based).
+
+	Notes;
+		Multiply with 1/N at forward transform.
+
+	Input;
+		fft		: FFT context
+		wlen	: FFT length
+	Output;
+		retval	: Error status
+*/
+ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen) {
+	ERR_STATUS status = DFTI_NO_ERROR;
+
+	status = DftiCreateDescriptor_d_1d(fft, DFTI_REAL, wlen); // Create DFT Descriptor
+	if (status && !DftiErrorClass(status, DFTI_NO_ERROR))
+		return status;
+	status = DftiSetValue(*fft, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX); // CCE Storage type
+	if (status && !DftiErrorClass(status, DFTI_NO_ERROR))
+		return status;
+	status = DftiSetValue(*fft, DFTI_PLACEMENT, DFTI_NOT_INPLACE); // Out-of-place (Not replace input)
+	if (status && !DftiErrorClass(status, DFTI_NO_ERROR))
+		return status;
+	return DftiSetValue(*fft, DFTI_FORWARD_SCALE, 1.0 / wlen); // Set forward scale 1/wlen
 }
 
 /** ##############################################################################################################
@@ -179,38 +206,125 @@ cleanup:
 	Calculate spectrogram for offline data
 
 	Input;
-
+		data	: Input 1-D data
+		dataLen	: Length of data vector
+		window	: Vector for windowing
+		wlen	: Window length
+		overlap	: Overlap size
 	Output;
-
+		output	: 2-D time frequency data. Every row is a time window, every col is a frequency bin
+		retval	: Error status		
 */
-ERR_STATUS spectrogram(Ipp64f* data, int dataLen, Ipp64f** output, Ipp64f* window, int wlen, int overlap)
+ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* window, int wlen, int overlap, int bits)
 {
-	ERR_STATUS status = ippStsNoErr;
-	int shift = wlen - overlap;
-	int max_thread = omp_get_max_threads();
-	int len = floor((dataLen - wlen) / (shift)) + 1;
-	Ipp8u** buff = ippMalloc(max_thread * sizeof(Ipp8u*));
-	IppsFFTSpec_R_64f** vfft = ippMalloc(max_thread * sizeof(IppsFFTSpec_R_64f*));
+	ERR_STATUS status = DFTI_NO_ERROR;			// Error descriptor	
+
+	int nth = MKL_Set_Num_Threads_Local(1);		// Set MKL thread to 1
+	int max_thread = omp_get_max_threads();		// Get max thread num
 	
-	if (!(buff && vfft)) {
-		status = ippStsMemAllocErr;
+	int shift = wlen - overlap;
+	int outLen = floor((dataLen - wlen) / (shift)) + 1;
+	DFTI_DESCRIPTOR_HANDLE *vfft = MKL_malloc(max_thread * sizeof(DFTI_DESCRIPTOR_HANDLE), 64);	// FFT Descriptors
+
+	// Init output	
+	double **out = (double**)MKL_malloc(outLen * sizeof(double*), 64);
+	if (!(out && vfft)) { // Check allocated memory
+		status = DFTI_MEMORY_ERROR;
 		goto cleanup;
 	}
-
-	for (int i = 0; i < max_thread; ++i) {
-		if (status = createFFT(&vfft[i], &buff[i], round(log2(wlen))), status)
+	for (size_t i = 0; i < outLen; ++i) {
+		out[i] = (double*)MKL_malloc((wlen / 2 + 1) * sizeof(double), 64);
+		if (!out[i]) { // Check allocated memory
+			status = DFTI_MEMORY_ERROR;
 			goto cleanup;
-	}		
-	
-	#pragma omp parallel for
-	for (int i = 0; i < len; ++i) {
-		ERR_STATUS status_local = ippStsNoErr;
-		
-		int id = omp_get_thread_num();		
+		}
+	}
 
+	// Init FFT
+	for (size_t i = 0; i < max_thread; ++i) {
+		status = createFFT_MKL(&vfft[i], wlen);
+		if (status && !DftiErrorClass(status, DFTI_NO_ERROR)) {
+			goto cleanup;
+		}
+	}
+
+	// Compute FFT
+	#pragma omp parallel for
+	for (int i = 0; i < outLen; ++i) {
+		if (!status) {
+			ERR_STATUS status_local = DFTI_NO_ERROR;
+			int id = omp_get_thread_num();
+
+			double* ptr = NULL;
+			double* buff = (double*)MKL_malloc(wlen * sizeof(double), 64);
+			MKL_Complex16* fdata = (MKL_Complex16*)MKL_malloc((wlen / 2 + 1) * sizeof(MKL_Complex16), 64);
+			if (!(buff && fdata)) {	// Check memory
+				#pragma omp critical
+				status = DFTI_MEMORY_ERROR;
+				continue;
+			}
+
+			vdMul(wlen, &data[i*shift], window, buff);	// Multiply with window
+			if (status_local = vmlGetErrStatus(), status_local) {
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+			
+			status_local = DftiCommitDescriptor(vfft[id]); // Commit DFT
+			if (status_local && !DftiErrorClass(status_local, DFTI_NO_ERROR)) {
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+
+			status_local = DftiComputeForward(vfft[id], buff, fdata); // Compute DFT
+			if (status_local && !DftiErrorClass(status_local, DFTI_NO_ERROR)) {
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+
+			vzAbs(wlen / 2 + 1, fdata, out[i]); // Find magnitude
+			if (status_local = vmlGetErrStatus(), status_local) {
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+
+			cblas_dscal(wlen / 2 + 1, pow(2, -bits + 2), out[i], 1); // Normalize
+			vdLog10(wlen / 2 + 1, out[i], out[i]); // Log
+			if (status_local = vmlGetErrStatus(), status_local) {
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+			cblas_dscal(wlen / 2 + 1, 20, out[i], 1); // Multiply 20
+
+			ptr = out[i];
+			for (size_t j = 0; j < wlen / 2 + 1; ++j) {
+				if (ptr[j] < -150)
+					ptr[j] = -150;
+			}
+
+			// Free buffers
+			MKL_free(fdata);
+			MKL_free(buff);
+		}		
 	}
 
 cleanup:
+	MKL_Set_Num_Threads_Local(nth); // Set thread to default
+	if (status) {
+		for (size_t i = 0; i < outLen; ++i)
+			MKL_free(out[i]);
+		MKL_free(out);
+	}
+
+	// Release FFT
+	for (size_t i = 0; i < max_thread; ++i)
+		status = DftiFreeDescriptor(&vfft[i]);
+	MKL_free(vfft);
 
 	return status;
 }
