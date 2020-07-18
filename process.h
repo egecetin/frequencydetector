@@ -10,11 +10,22 @@ extern "C" {
 #endif
 	
 	/* ##################### Definitions ##################### */
-	#define MAX_WLEN	32768
-	#define MIN_WLEN	   32
+	#define MAX_WLEN		32768
+	#define MIN_WLEN		   32
+	#define THRESHOLD_ALPHA	  3.5
+	#define THRESH_INFLUENCE  0.5
 
 	typedef int ERR_STATUS;
 	typedef enum { ippsLowPass, ippsHighPass, ippsBandPass, ippsBandStop } IppFilterType;
+
+	extern double **fBuffer;		// All frequency data
+	extern double **position;
+	extern double *sumBuffer;		// Sum of data	
+	extern int fBuffLen;			
+	extern int lagLen;
+	extern int currentSize;			
+	extern int desiredSize;	
+		
 	
 	/* ##################### Functions ##################### */
 	
@@ -27,8 +38,8 @@ extern "C" {
 
 	// Processing
 	ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* window, int wlen, int overlap, int bits);
-	ERR_STATUS threshold();
-	ERR_STATUS constant_freq();
+	double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n);
+	double* estimate_freq(double *data, int* dataLen);
 
 #ifdef __cplusplus
 }

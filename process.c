@@ -1,5 +1,14 @@
 #include "process.h"
 
+double **fBuffer = NULL;
+double **position = NULL;
+double *sumBuffer = NULL;
+int fBuffLen = 0;
+int lagLen = 0;
+int currentSize = 0;
+int desiredSize = 0;
+
+
 /** ##############################################################################################################
 	Init window vectors from MAX_WLEN to MIN_WLEN every power of 2 for Hanning, Hamming, Rectangle, Blackman and Bartlett. 
 
@@ -232,7 +241,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 		status = DFTI_MEMORY_ERROR;
 		goto cleanup;
 	}
-	for (size_t i = 0; i < outLen; ++i) {
+	for (int i = 0; i < outLen; ++i) {
 		out[i] = (double*)MKL_malloc((wlen / 2 + 1) * sizeof(double), 64);
 		if (!out[i]) { // Check allocated memory
 			status = DFTI_MEMORY_ERROR;
@@ -241,7 +250,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 	}
 
 	// Init FFT
-	for (size_t i = 0; i < max_thread; ++i) {
+	for (int i = 0; i < max_thread; ++i) {
 		status = createFFT_MKL(&vfft[i], wlen);
 		if (status && !DftiErrorClass(status, DFTI_NO_ERROR)) {
 			goto cleanup;
@@ -302,7 +311,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 			cblas_dscal(wlen / 2 + 1, 20, out[i], 1); // Multiply 20
 
 			ptr = out[i];
-			for (size_t j = 0; j < wlen / 2 + 1; ++j) {
+			for (int j = 0; j < wlen / 2 + 1; ++j) {
 				if (ptr[j] < -150)
 					ptr[j] = -150;
 			}
@@ -316,16 +325,104 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 cleanup:
 	MKL_Set_Num_Threads_Local(nth); // Set thread to default
 	if (status) {
-		for (size_t i = 0; i < outLen; ++i)
+		for (int i = 0; i < outLen; ++i)
 			MKL_free(out[i]);
 		MKL_free(out);
 	}
 
 	// Release FFT
-	for (size_t i = 0; i < max_thread; ++i)
+	for (int i = 0; i < max_thread; ++i)
 		status = DftiFreeDescriptor(&vfft[i]);
 	MKL_free(vfft);
 
 	return status;
+}
+
+/** ##############################################################################################################
+	Threshold the data
+
+	Input;
+		data		: Input 1-D data
+		dataLen		: Length of data vector
+		lag			: Moving window length
+		threshold	: Multiplier for thresholding
+		influence	: Divider for accepted data
+	Output;
+		retval		: Indexes of accepted points
+*/
+double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n)
+{
+	double mean, std, mean_local, std_local;
+	double *ptr = NULL;
+	*n = 0;
+
+	// Init buffers
+	double *dbuff = (double*)MKL_malloc(dataLen * sizeof(double), 64);
+	double *output = (double*)MKL_malloc(dataLen * sizeof(double), 64);
+	if (!(dbuff && output)) // Check allocated memory
+		goto cleanup;
+
+	if (ippsMeanStdDev_64f(data, dataLen, &mean, &std)) // Global mean, std
+		goto cleanup;
+	if (ippsMeanStdDev_64f(data, lag, &mean_local, &std_local)) // Local mean, std
+		goto cleanup;
+	
+	ptr = &dbuff[0];
+	cblas_dcopy(dataLen, data, 1, dbuff, 1); // Copy data to buffer
+	for (int i = lag + 1; i < dataLen; ++i) {
+		if (dbuff[i] > threshold*std_local + threshold * std + mean_local + mean) {
+			output[*n] = i;
+			*n += 1;
+			dbuff[i] = influence * dbuff[i] + (1 - influence)*(dbuff[i - 1]);
+		}
+		++ptr;
+		if (ippsMeanStdDev_64f(ptr, lag, &mean_local, &std_local)) // Update local mean, std
+			goto cleanup;
+	}
+
+	
+cleanup:
+	// Deallocation
+	MKL_free(dbuff);
+	MKL_realloc(output, (*n) * sizeof(double)); // Shrink output data
+	if (*n == 0)
+		n = NULL;
+
+	return output;
+}
+
+/** ##############################################################################################################
+	Estimate frequencies
+
+	Input;
+		data		: Input 1-D data		
+	Output;
+		size		: Return size
+		retval		: Indexes of accepted points
+*/
+double* estimate_freq(double *data, int *size)
+{
+	if (currentSize < desiredSize) { // Initialization
+		cblas_dcopy(fBuffLen, data, 1, *position, 1);	// Copy data to vector
+		vdAdd(fBuffLen, sumBuffer, data, sumBuffer);	// Add to sum
+		
+		++currentSize;
+		if (++position - fBuffer > desiredSize)
+			position = fBuffer;
+		
+		*size = 0;
+		return NULL;
+	}
+	else { // If buffer is full
+		double *out = thresholding(sumBuffer, fBuffLen, lagLen, THRESHOLD_ALPHA, THRESH_INFLUENCE, size);
+
+		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);
+		cblas_dcopy(fBuffLen, data, 1, *position, 1);
+		vdAdd(fBuffLen, sumBuffer, *position, sumBuffer);
+		if (++position - fBuffer > desiredSize)
+			position = fBuffer;
+
+		return out;
+	}
 }
 
