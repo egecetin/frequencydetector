@@ -1,12 +1,12 @@
 #include "process.h"
 
-double **fBuffer = NULL;
-double **position = NULL;
-double *sumBuffer = NULL;
-int fBuffLen = 0;
-int lagLen = 0;
-int currentSize = 0;
-int desiredSize = 0;
+double **fBuffer = NULL;	
+double **position = NULL;	
+double *sumBuffer = NULL;	
+int fBuffLen = 0;			
+int lagLen = 0;				
+int currentSize = 0;		
+int desiredSize = 0;		
 
 
 /** ##############################################################################################################
@@ -64,6 +64,42 @@ cleanup:
 	ippFree(ones);
 
 	return arr;		
+}
+
+
+/** ##############################################################################################################
+	Initializes all global variable
+	
+	Input;
+		wlen	: Window length of time data (Should be even)
+		nwin	: Desired number of windows
+		lagLen	: Lag amount for thresholding (Choose equal to number of filtered freq pts with high pass)
+	Output;
+		
+*/
+void init_globalvar(int wlen, int nwin, int lag)
+{
+	if (fBuffer) { // Free if already allocated
+		for (int i = 0; i < desiredSize; ++i) {
+			free(fBuffer[i]);
+		}
+		free(fBuffer);
+		fBuffer = NULL;
+	}
+
+	// Set variables
+	fBuffLen = wlen / 2;
+	lagLen = lag;
+	currentSize = 0;
+	desiredSize = nwin;
+
+	// Allocate data
+	fBuffer = (double**)malloc(desiredSize * sizeof(double*));
+	for (int i = 0; i < desiredSize; ++i) {
+		fBuffer[i] = (double*)malloc(fBuffLen * sizeof(double));
+	}
+
+	position = fBuffer;
 }
 
 /** ##############################################################################################################
@@ -149,14 +185,17 @@ ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen) {
 		tapslen		: Degree of filter
 		windowType	: Window type for design
 	Output;
+		pBuffer		: Buffer for calculations
 		retval		: Error status
 */
-ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType)
+ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u *pBuffer)
 {
 	ERR_STATUS status = ippStsNoErr;
 	
 	int specSize, bufSize;
-	Ipp8u *pBuffer = NULL;
+	if (pBuffer) {
+		ippsFree(pBuffer);
+	}		
 	Ipp64f *taps = NULL;
 
 	// Generate buffers for library
@@ -206,7 +245,6 @@ ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, doubl
 
 cleanup:
 	ippFree(taps);
-	ippFree(pBuffer);
 
 	return status;
 }
@@ -348,9 +386,10 @@ cleanup:
 		threshold	: Multiplier for thresholding
 		influence	: Divider for accepted data
 	Output;
+		th_values	: (Optional) Threshold values. Can be NULL if not needed
 		retval		: Indexes of accepted points
 */
-double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n)
+double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n, double *th_values)
 {
 	double mean, std, mean_local, std_local;
 	double *ptr = NULL;
@@ -370,12 +409,14 @@ double* thresholding(double *data, int dataLen, int lag, double threshold, doubl
 	ptr = &dbuff[0];
 	cblas_dcopy(dataLen, data, 1, dbuff, 1); // Copy data to buffer
 	for (int i = lag + 1; i < dataLen; ++i) {
+		if (th_values)
+			th_values[i] = threshold * std_local + threshold * std + mean_local + mean;
 		if (dbuff[i] > threshold*std_local + threshold * std + mean_local + mean) {
 			output[*n] = i;
 			*n += 1;
 			dbuff[i] = influence * dbuff[i] + (1 - influence)*(dbuff[i - 1]);
 		}
-		++ptr;
+		++ptr;		
 		if (ippsMeanStdDev_64f(ptr, lag, &mean_local, &std_local)) // Update local mean, std
 			goto cleanup;
 	}
@@ -395,16 +436,20 @@ cleanup:
 	Estimate frequencies
 
 	Input;
-		data		: Input 1-D data		
+		data		: Input 1-D data
+		pSpec		: Spec for filtering
+		pBuffer		: Buffer for filtering
 	Output;
 		size		: Return size
+		th_values	: (Optional) Threshold values. Can be NULL if not needed
 		retval		: Indexes of accepted points
 */
-double* estimate_freq(double *data, int *size)
+double* estimate_freq(double *data, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values)
 {
 	if (currentSize < desiredSize) { // Initialization
-		cblas_dcopy(fBuffLen, data, 1, *position, 1);	// Copy data to vector
-		vdAdd(fBuffLen, sumBuffer, data, sumBuffer);	// Add to sum
+		cblas_dcopy(fBuffLen, data, 1, *position, 1);								// Copy data to vector
+		ippsFIRSR_64f(*position, *position, fBuffLen, pSpec, NULL, NULL, pBuffer);  // Filter data
+		vdAdd(fBuffLen, sumBuffer, data, sumBuffer);								// Add to sum
 		
 		++currentSize;
 		if (++position - fBuffer > desiredSize)
@@ -414,11 +459,12 @@ double* estimate_freq(double *data, int *size)
 		return NULL;
 	}
 	else { // If buffer is full
-		double *out = thresholding(sumBuffer, fBuffLen, lagLen, THRESHOLD_ALPHA, THRESH_INFLUENCE, size);
+		double *out = thresholding(sumBuffer, fBuffLen, lagLen, THRESHOLD_ALPHA, THRESH_INFLUENCE, size, th_values);
 
-		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);
-		cblas_dcopy(fBuffLen, data, 1, *position, 1);
-		vdAdd(fBuffLen, sumBuffer, *position, sumBuffer);
+		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);							// Subtract old data from sum
+		cblas_dcopy(fBuffLen, data, 1, *position, 1);								// Overwrite it
+		ippsFIRSR_64f(*position, *position, fBuffLen, pSpec, NULL, NULL, pBuffer);	// Filter new data
+		vdAdd(fBuffLen, sumBuffer, *position, sumBuffer);							// Add to sum
 		if (++position - fBuffer > desiredSize)
 			position = fBuffer;
 
