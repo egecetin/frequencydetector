@@ -38,10 +38,10 @@ extern "C" {
 	void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf);
 	ERR_STATUS createFFT_IPP(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order);
 	ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen);
-	ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u *pBuffer);
+	ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u **pBuffer);
 
 	// Processing
-	ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* window, int wlen, int overlap, int bits);
+	ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* window, int wlen, int overlap, int bits);
 	double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n, double *th_values);
 	double* estimate_freq(double *data, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values);
 
