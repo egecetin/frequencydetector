@@ -1,13 +1,14 @@
 #include "process.h"
 
-double **fBuffer = NULL;	
-double **position = NULL;	
-double *sumBuffer = NULL;	
-int fBuffLen = 0;			
-int lagLen = 0;				
-int currentSize = 0;		
-int desiredSize = 0;		
-
+double **fBuffer = NULL;
+double **position = NULL;
+double *sumBuffer = NULL;
+int fBuffLen;
+int lagLen;
+int currentSize;		
+int desiredSize;
+double threshold_alpha;
+double thresh_influence;
 
 /** ##############################################################################################################
 	Init window vectors from MAX_WLEN to MIN_WLEN every power of 2 for Hanning, Hamming, Rectangle, Blackman and Bartlett. 
@@ -71,13 +72,15 @@ cleanup:
 	Initializes all global variable
 	
 	Input;
-		wlen	: Window length of time data (Should be even)
-		nwin	: Desired number of windows
-		lagLen	: Lag amount for thresholding (Choose equal to number of filtered freq pts with high pass)
+		wlen		: Window length of time data (Should be even)
+		nwin		: Desired number of windows
+		lagLen		: Lag amount for thresholding (Choose equal to number of filtered freq pts with high pass)
+		thresh_alpha: Multiplier for threshold
+		thresh_inf	: Divider for detected point
 	Output;
 		
 */
-void init_globalvar(int wlen, int nwin, int lag)
+void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf)
 {
 	if (fBuffer) { // Free if already allocated
 		for (int i = 0; i < desiredSize; ++i) {
@@ -88,6 +91,8 @@ void init_globalvar(int wlen, int nwin, int lag)
 	}
 
 	// Set variables
+	threshold_alpha = thresh_alpha;
+	thresh_influence = thresh_inf;
 	fBuffLen = wlen / 2;
 	lagLen = lag;
 	currentSize = 0;
@@ -350,8 +355,8 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 
 			ptr = out[i];
 			for (int j = 0; j < wlen / 2 + 1; ++j) {
-				if (ptr[j] < -150)
-					ptr[j] = -150;
+				if (ptr[j] < DBLIMIT)
+					ptr[j] = DBLIMIT;
 			}
 
 			// Free buffers
@@ -359,6 +364,9 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 			MKL_free(buff);
 		}		
 	}
+
+	if (max_thread == 1)	// All PCs have more than 1 thread if it is 1 there is a problem (Assume as warning)
+		status = DFTI_MULTITHREADED_ERROR;
 
 cleanup:
 	MKL_Set_Num_Threads_Local(nth); // Set thread to default
@@ -459,15 +467,15 @@ double* estimate_freq(double *data, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int 
 		return NULL;
 	}
 	else { // If buffer is full
-		double *out = thresholding(sumBuffer, fBuffLen, lagLen, THRESHOLD_ALPHA, THRESH_INFLUENCE, size, th_values);
+		double *out = thresholding(sumBuffer, fBuffLen, lagLen, threshold_alpha, thresh_influence, size, th_values);
 
 		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);							// Subtract old data from sum
 		cblas_dcopy(fBuffLen, data, 1, *position, 1);								// Overwrite it
 		ippsFIRSR_64f(*position, *position, fBuffLen, pSpec, NULL, NULL, pBuffer);	// Filter new data
 		vdAdd(fBuffLen, sumBuffer, *position, sumBuffer);							// Add to sum
 		if (++position - fBuffer > desiredSize)
-			position = fBuffer;
-
+			position = fBuffer;	
+			
 		return out;
 	}
 }
