@@ -193,13 +193,13 @@ ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen) {
 		pBuffer		: Buffer for calculations
 		retval		: Error status
 */
-ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u *pBuffer)
+ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u **pBuffer)
 {
 	ERR_STATUS status = ippStsNoErr;
 	
 	int specSize, bufSize;
-	if (pBuffer) {
-		ippsFree(pBuffer);
+	if (*pBuffer) {
+		ippsFree(*pBuffer);
 	}		
 	Ipp64f *taps = NULL;
 
@@ -208,8 +208,8 @@ ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, doubl
 		goto cleanup;
 
 	taps = ippsMalloc_64f(tapsLen);
-	pBuffer = ippsMalloc_8u(bufSize);
-	if (!(taps && pBuffer)) { // Check allocated memory
+	*pBuffer = ippsMalloc_8u(bufSize);
+	if (!(taps && *pBuffer)) { // Check allocated memory
 		status = ippStsMemAllocErr;
 		goto cleanup;
 	}
@@ -218,16 +218,16 @@ ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, doubl
 	switch (filterType)
 	{
 	case ippsLowPass:
-		status = ippsFIRGenLowpass_64f(*rFreq, taps, tapsLen, windowType, ippTrue, pBuffer);
+		status = ippsFIRGenLowpass_64f(*rFreq, taps, tapsLen, windowType, ippTrue, *pBuffer);
 		break;
 	case ippsHighPass:
-		status = ippsFIRGenHighpass_64f(*rFreq, taps, tapsLen, windowType, ippTrue, pBuffer);
+		status = ippsFIRGenHighpass_64f(*rFreq, taps, tapsLen, windowType, ippTrue, *pBuffer);
 		break;
 	case ippsBandPass:
-		status = ippsFIRGenBandpass_64f(rFreq[0], rFreq[1], taps, tapsLen, windowType, ippTrue, pBuffer);
+		status = ippsFIRGenBandpass_64f(rFreq[0], rFreq[1], taps, tapsLen, windowType, ippTrue, *pBuffer);
 		break;
 	case ippsBandStop:
-		status = ippsFIRGenBandstop_64f(rFreq[0], rFreq[1], taps, tapsLen, windowType, ippTrue, pBuffer);
+		status = ippsFIRGenBandstop_64f(rFreq[0], rFreq[1], taps, tapsLen, windowType, ippTrue, *pBuffer);
 		break;
 	default:
 		status = ippStsErr;
@@ -239,8 +239,8 @@ ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, doubl
 	if (status = ippsFIRSRGetSize(tapsLen, ipp64f, &specSize, &bufSize), status)
 		goto cleanup;
 
-	*pSpec = (IppsFIRSpec_64f*)ippsMalloc_8u(specSize);
-	pBuffer = ippsMalloc_8u(bufSize);
+	*pSpec = (IppsFIRSpec_64f*)ippsMalloc_8u(specSize);	
+	ippsFree(*pBuffer);	*pBuffer = ippsMalloc_8u(bufSize);
 	if (!(pSpec && pBuffer)) { // Check allocated memory
 		status = ippStsMemAllocErr;
 		goto cleanup;
@@ -267,7 +267,7 @@ cleanup:
 		output	: 2-D time frequency data. Every row is a time window, every col is a frequency bin
 		retval	: Error status		
 */
-ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* window, int wlen, int overlap, int bits)
+ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* window, int wlen, int overlap, int bits)
 {
 	ERR_STATUS status = DFTI_NO_ERROR;			// Error descriptor	
 
@@ -363,18 +363,20 @@ ERR_STATUS spectrogram(double* data, int dataLen, double** output, double* windo
 			MKL_free(fdata);
 			MKL_free(buff);
 		}		
-	}
+	}	
 
 	if (max_thread == 1)	// All PCs have more than 1 thread if it is 1 there is a problem (Assume as warning)
 		status = DFTI_MULTITHREADED_ERROR;
-
+	
 cleanup:
 	MKL_Set_Num_Threads_Local(nth); // Set thread to default
 	if (status) {
 		for (int i = 0; i < outLen; ++i)
 			MKL_free(out[i]);
 		MKL_free(out);
+		out = NULL;
 	}
+	*output = out;
 
 	// Release FFT
 	for (int i = 0; i < max_thread; ++i)

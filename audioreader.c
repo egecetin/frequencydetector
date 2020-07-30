@@ -1,24 +1,28 @@
 #include "audioreader.h"
 
-int init_audio_reader(char *filename, AVCodec *codec, AVCodecContext *codecCtx, AVFormatContext *formatCtx, int *audioStreamIndex, int *nStream)
+/** ##############################################################################################################
+	
+
+	Input;
+	Output;
+*/
+int init_audio_reader(char *filename, AVCodec **codec, AVCodecContext **codecCtx, AVFormatContext **formatCtx, int **audioStreamIndex, int *nStream)
 {
 	int err = 0;
 	
-	if (err = avformat_open_input(&formatCtx, filename, NULL, 0), err)	// Open file
+	if (err = avformat_open_input(&(*formatCtx), filename, NULL, 0), err)	// Open file
 		goto cleanup;
-	if (err = avformat_find_stream_info(formatCtx, NULL), err)			// Get info
+	if (err = avformat_find_stream_info(*formatCtx, NULL), err)				// Get info
 		goto cleanup;
 
-	if (!audioStreamIndex)
-		free(audioStreamIndex);
-	audioStreamIndex = findAudioStreams(formatCtx, nStream);			// Find audio part
-	if (!audioStreamIndex) {
+	*audioStreamIndex = findAudioStreams(*formatCtx, nStream);				// Find audio part
+	if (!(*audioStreamIndex)) {
 		err = AVERROR_STREAM_NOT_FOUND;
 		goto cleanup;
 	}
 
 	// vvvvvv  Need multiple stream support below  vvvvvv
-	codec = avcodec_find_decoder(formatCtx->streams[audioStreamIndex]->codecpar->codec_id);
+/*	codec = avcodec_find_decoder((*formatCtx)->streams[audioStreamIndex]->codecpar->codec_id);
 	if (!codec) {
 		err = AVERROR_DECODER_NOT_FOUND;
 		goto cleanup;
@@ -36,22 +40,35 @@ int init_audio_reader(char *filename, AVCodec *codec, AVCodecContext *codecCtx, 
 
 	if (err = avcodec_open2(codecCtx, codec, NULL), err)				// Init decoder
 		goto cleanup;
-
+*/
 cleanup:
 	if (err) {
 		avcodec_free_context(&codecCtx);
 		avformat_close_input(&formatCtx);
+		av_free(audioStreamIndex);
 	}
-
+	
 	return err;
 }
 
+/** ##############################################################################################################
+
+
+	Input;
+	Output;
+*/
 void deinit_audio_reader(AVCodecContext *codecCtx, AVFormatContext *formatCtx)
 {
 	avcodec_free_context(&codecCtx);
 	avformat_close_input(&formatCtx);
 }
 
+/** ##############################################################################################################
+
+
+	Input;
+	Output;
+*/
 int* findAudioStreams(AVFormatContext* formatCtx, int *n)
 {
 	int j = 0;
@@ -63,7 +80,9 @@ int* findAudioStreams(AVFormatContext* formatCtx, int *n)
 			++j;
 		}
 	}	
-	audioStreamIndex = (int*)av_realloc(audioStreamIndex, sizeof(int)*j);
+	audioStreamIndex = (int*)av_realloc(audioStreamIndex, sizeof(int)*j);	
+	if (!j)
+		audioStreamIndex = NULL;
 	*n = j;
 
 	return audioStreamIndex;
