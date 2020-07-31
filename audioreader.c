@@ -93,7 +93,7 @@ int initAudioReaderStruct(char *filename, AudioReader *ctx)
 
 cleanup:
 	if (err)
-		deallocAudioReaderStruct(ctx);
+		deinitAudioReaderStruct(ctx);
 	else
 		err = buff;
 
@@ -107,16 +107,8 @@ cleanup:
 		ctx: Struct for audio reading
 	Output;
 */
-void deallocAudioReaderStruct(AudioReader * ctx)
+void deinitAudioReaderStruct(AudioReader * ctx)
 {
-#ifdef _WIN32
-	for (int i = 0; i < FILENAME_MAX; ++i) {
-#elif __linux__
-	for (int i = 0; i < PATH_MAX; ++i) {
-#endif // WIN32
-		ctx->fullpath[i] = '\0';
-	}
-
 	for (int i = 0; i < ctx->nStream; ++i) {
 		avcodec_free_context(&(ctx->codecContexts[i]));
 		av_free(ctx->codecTypes[i]); ctx->codecTypes[i] = NULL;
@@ -127,6 +119,15 @@ void deallocAudioReaderStruct(AudioReader * ctx)
 	av_free(ctx->codecTypes); ctx->codecTypes = NULL;
 
 	avformat_close_input(&(ctx->formatContext));
+
+	#ifdef _WIN32
+	for (int i = 0; i < FILENAME_MAX; ++i)
+	#elif __linux__
+	for (int i = 0; i < PATH_MAX; ++i)
+	#endif
+	{
+		ctx->fullpath[i] = '\0';
+	}
 }
 
 /** ##############################################################################################################
@@ -165,29 +166,27 @@ int* findAudioStreams(AVFormatContext* formatCtx, int *n)
 	Input;
 		ctx		: Context of opened file
 	Output;
-		retval	: 2D output data
+		data	: Output data
+		retval	: Error value
 */
-double** readAudioFile(AudioReader *ctx)
+int readAudioFile(AudioReader *ctx, AudioData *data)
 {
 	int err = 0;
+	int *currPos = NULL;
 	AVFrame* frame = NULL;
 	AVPacket packet;
-	double **data = NULL;
 
 	// Init variables
 	av_init_packet(&packet);
 	frame = av_frame_alloc();
-	if (!frame) {
+	// <-------------------- Allocate currPos
+	if (!(frame && currPos)) {
 		err = AVERROR_UNKNOWN;
 		goto cleanup;
 	}
-
-	// Allocate output
-	dim[0] = 0;
-	for (int i = 0; i < ctx->nStream; ++i) {
-		dim[0] += ctx->codecContexts[i]->channels;
-	}
-	data = (double**)av_malloc(dim[0] * sizeof(double*));
+	deallocAudioData(data); // Clear previous contents
+	if (err = allocateAudioData(data, *ctx), err)
+		goto cleanup;
 	
 	while (!(err = av_read_frame(ctx->formatContext, &packet))) {
 
@@ -205,8 +204,9 @@ double** readAudioFile(AudioReader *ctx)
 					if (av_sample_fmt_is_planar(ctx->codecContexts[i]->sample_fmt)) {
 						for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
 							frame->extended_data[j];
+							frame->nb_samples;
+							
 						}
-
 
 					}
 					// Packed format
@@ -218,6 +218,9 @@ double** readAudioFile(AudioReader *ctx)
 					// Free frame.
 					av_frame_unref(frame);
 				}
+				if (err == AVERROR(EAGAIN))	// If eagain successfully received all packets
+					err = 0;
+				break;
 			}
 		}
 		av_packet_unref(&packet);
@@ -226,7 +229,64 @@ double** readAudioFile(AudioReader *ctx)
 cleanup:
 	av_frame_free(&frame);
 
-	return data;
+	if (err) {
+		deallocAudioData(data);
+	}
+
+	return err;
+}
+
+/** ##############################################################################################################
+	Allocates AudioData structure and its subcontents
+
+	Input;
+	Output;
+*/
+int allocateAudioData(AudioData *audio, AudioReader ctx)
+{
+	audio->nStream = ctx.nStream;
+	audio->data = (StreamData*)av_malloc(ctx.nStream * sizeof(StreamData*));
+	if (!audio->data)
+		return AVERROR_UNKNOWN;
+	
+	for (int i = 0; i < ctx.nStream; ++i) {
+		audio->data[i].dataLen = (ctx.formatContext->duration / AV_TIME_BASE)*ctx.codecContexts[i]->sample_rate;
+		audio->data[i].nChannel = ctx.codecContexts[i]->channels;
+		audio->data[i].channelData = (int64_t**)av_malloc(audio->data[i].nChannel * sizeof(int64_t*));
+		if (!audio->data[i].channelData)
+			return AVERROR_UNKNOWN;
+
+		for (int j = 0; j < audio->data[i].nChannel; ++j) {
+			audio->data[i].channelData[j] = (int64_t*)av_malloc(audio->data[i].dataLen * sizeof(int64_t));
+			if (!audio->data[i].channelData[j])
+				return AVERROR_UNKNOWN;
+		}
+	}
+
+	return 0;
+}
+
+/** ##############################################################################################################
+	Deallocates AudioData structure and its subcontents
+
+	Input;
+	Output;
+*/
+void deallocAudioData(AudioData *audio)
+{
+	for (int i = 0; i < audio->nStream; ++i) {
+		for (int j = 0; j < audio->data[i].nChannel; ++j) {
+			av_free(audio->data[i].channelData[j]);
+			audio->data[i].channelData[j] = NULL;
+		}
+		audio->data[i].nChannel = 0;
+		audio->data[i].dataLen = 0;
+	}
+	av_free(audio->data->channelData);
+	audio->data->channelData = NULL;
+	av_free(audio->data);
+	audio->data = NULL;
+	audio->nStream = 0;
 }
 
 /** ##############################################################################################################
