@@ -1,5 +1,7 @@
 #pragma once
 
+#include <time.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,7 +12,7 @@ extern "C" {
 	// Definitions
 	#define CHANNEL_LIMIT 24
 
-	struct AudioReader
+	struct AudioReader_s
 	{
 	#ifdef _WIN32
 		char fullpath[FILENAME_MAX];
@@ -24,11 +26,18 @@ extern "C" {
 		AVCodec** codecTypes;
 	};
 
+	typedef struct AudioReader_s AudioReader;	
+	const AudioReader AudioReader_Default = { {'\0'}, 0, NULL, NULL, NULL, NULL };
+
 	// Functions
-	int initAudioReaderStruct(char* filename, struct AudioReader* ctx);
-	void deallocAudioReaderStruct(struct AudioReader* ctx);
-	void deinit_audio_reader(AVCodecContext* codecCtx, AVFormatContext *formatCtx);
+	int initAudioReaderStruct(char* filename, AudioReader* ctx);
+	void deallocAudioReaderStruct(AudioReader *ctx);
 	int* findAudioStreams(AVFormatContext* formatCtx, int* n);
+	double** readAudioFile(AudioReader *ctx);
+	// Need stream version!!!!!
+
+	void printStreamInformation(const AVFormatContext *ctx, const AVCodec* codec, const AVCodecContext* codecCtx, int audioStreamIndex);
+	char* currentDateTime();
 
 #ifdef __cplusplus
 }

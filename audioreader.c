@@ -9,16 +9,16 @@
 		ctx		: Struct for audio reading
 		retval	: Error value. Zero if no error, negative if AudioReader struct invalid, positive if cant decode some streams
 */
-int initAudioReaderStruct(char *filename, struct AudioReader *ctx)
+int initAudioReaderStruct(char *filename, AudioReader *ctx)
 {
 	int err = 0, buff = 0;
-	
+
 #ifdef _WIN32
 	strcpy_s(ctx->fullpath, FILENAME_MAX, filename);
 #elif __linux__
 	strcpy(ctx->fullpath, filename);
-#endif // WIN32
-
+#endif // WIN32	
+	
 	if (err = avformat_open_input(&(ctx->formatContext), filename, NULL, 0), err)	// Open file
 		goto cleanup;
 	if (err = avformat_find_stream_info(ctx->formatContext, NULL), err)				// Get info
@@ -86,8 +86,12 @@ int initAudioReaderStruct(char *filename, struct AudioReader *ctx)
 	ctx->codecTypes = (AVCodec**)av_realloc(ctx->codecTypes, ctx->nStream * sizeof(AVCodec*));
 	ctx->audioStreamIndexes = (int*)av_realloc(ctx->audioStreamIndexes, ctx->nStream * sizeof(int));
 
-cleanup:
+#ifdef _DEBUG
+	for (int i = 0; i < ctx->nStream; ++i)
+		printStreamInformation(ctx->formatContext, ctx->codecTypes[i], ctx->codecContexts[i], ctx->audioStreamIndexes[i]);
+#endif // _DEBUG
 
+cleanup:
 	if (err)
 		deallocAudioReaderStruct(ctx);
 	else
@@ -103,18 +107,18 @@ cleanup:
 		ctx: Struct for audio reading
 	Output;
 */
-void deallocAudioReaderStruct(struct AudioReader *ctx)
+void deallocAudioReaderStruct(AudioReader * ctx)
 {
-	#ifdef _WIN32
+#ifdef _WIN32
 	for (int i = 0; i < FILENAME_MAX; ++i) {
-	#elif __linux__
+#elif __linux__
 	for (int i = 0; i < PATH_MAX; ++i) {
-	#endif // WIN32
+#endif // WIN32
 		ctx->fullpath[i] = '\0';
 	}
 
 	for (int i = 0; i < ctx->nStream; ++i) {
-		avcodec_free_context(&(ctx->codecContexts[i]));		
+		avcodec_free_context(&(ctx->codecContexts[i]));
 		av_free(ctx->codecTypes[i]); ctx->codecTypes[i] = NULL;
 	}
 
@@ -126,7 +130,7 @@ void deallocAudioReaderStruct(struct AudioReader *ctx)
 }
 
 /** ##############################################################################################################
-	Find the audio stream indexes. Maximum 24 channel is allowed
+	Find the audio stream indexes. Maximum 24 different stream is allowed
 
 	Input;
 		formatCtx	: Opened AVFormatContext
@@ -153,4 +157,128 @@ int* findAudioStreams(AVFormatContext* formatCtx, int *n)
 	*n = j;
 
 	return audioStreamIndex;
+}
+
+/** ##############################################################################################################
+	Read whole audio file
+
+	Input;
+		ctx		: Context of opened file
+	Output;
+		retval	: 2D output data
+*/
+double** readAudioFile(AudioReader *ctx)
+{
+	int err = 0;
+	AVFrame* frame = NULL;
+	AVPacket packet;
+	double **data = NULL;
+
+	// Init variables
+	av_init_packet(&packet);
+	frame = av_frame_alloc();
+	if (!frame) {
+		err = AVERROR_UNKNOWN;
+		goto cleanup;
+	}
+
+	// Allocate output
+	dim[0] = 0;
+	for (int i = 0; i < ctx->nStream; ++i) {
+		dim[0] += ctx->codecContexts[i]->channels;
+	}
+	data = (double**)av_malloc(dim[0] * sizeof(double*));
+	
+	while (!(err = av_read_frame(ctx->formatContext, &packet))) {
+
+		err = -1;
+		for (int i = 0; i < ctx->nStream; ++i) {
+
+			// Find corresponding index
+			if (ctx->audioStreamIndexes[i] == packet.stream_index) {
+
+				err = avcodec_send_packet(ctx->codecContexts[i], &packet); // Send to decode				
+				// Receive the packet
+				while (!(err = avcodec_receive_frame(ctx->codecContexts[i], frame))) {
+
+					// Planar format
+					if (av_sample_fmt_is_planar(ctx->codecContexts[i]->sample_fmt)) {
+						for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+							frame->extended_data[j];
+						}
+
+
+					}
+					// Packed format
+					else {
+
+					}
+
+
+					// Free frame.
+					av_frame_unref(frame);
+				}
+			}
+		}
+		av_packet_unref(&packet);
+	}
+
+cleanup:
+	av_frame_free(&frame);
+
+	return data;
+}
+
+/** ##############################################################################################################
+	Print information to file
+
+	Input;
+	Output;
+*/
+void printStreamInformation(const AVFormatContext *ctx, const AVCodec *codec, const AVCodecContext *codecCtx, int audioStreamIndex)
+{
+#ifdef _WIN32
+	FILE *fptr = NULL;
+	fopen_s(&fptr, "log.txt", "a+");
+#elif __linux__
+	FILE *fptr = fopen("log.txt", "w+");
+#endif	
+	
+	char *time = currentDateTime();
+	fprintf(fptr, "%s\n", time);
+	free(time);
+	
+	fprintf(fptr, "Duration: %7f\n sec", (double)ctx->duration / AV_TIME_BASE);
+	fprintf(fptr, "Codec: %s\n", codec->long_name);
+	if (codec->sample_fmts != NULL) {
+		fprintf(fptr, "Supported sample formats: ");
+		for (int i = 0; codec->sample_fmts[i] != -1; ++i) {
+			fprintf(fptr, "%s", av_get_sample_fmt_name(codec->sample_fmts[i]));
+			if (codec->sample_fmts[i + 1] != -1) {
+				fprintf(fptr, ", ");
+			}
+		}
+		fprintf(fptr, "\n");
+	}
+	fprintf(fptr, "---------\n");
+	fprintf(fptr, "Stream ID:     %7d\n", audioStreamIndex);
+	fprintf(fptr, "Sample Format: %7s\n", av_get_sample_fmt_name(codecCtx->sample_fmt));
+	fprintf(fptr, "Sample Rate:   %7d\n", codecCtx->sample_rate);
+	fprintf(fptr, "Sample Size:   %7d\n", av_get_bytes_per_sample(codecCtx->sample_fmt));
+	fprintf(fptr, "Bit:           %7d\n", codecCtx->bits_per_raw_sample);
+	fprintf(fptr, "Channels:      %7d\n", codecCtx->channels);
+	fprintf(fptr, "Planar:        %7d\n", av_sample_fmt_is_planar(codecCtx->sample_fmt));
+	fprintf(fptr, "--------------------------------------------------------------\n");
+
+	fclose(fptr);
+}
+
+char* currentDateTime() {
+	time_t     now = time(0);
+	struct tm  tstruct;
+	char*      buf = (char*)malloc(80);
+	localtime_s(&tstruct, &now);
+	strftime(buf, 80, "%Y-%m-%d_%H%M%S", &tstruct);
+
+	return buf;
 }

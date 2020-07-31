@@ -1,7 +1,10 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "audioreader.h"
+
 #include <QMainWindow>
+
 
 //#include <QCustomPlot> // Wait for 5.14 release
 
