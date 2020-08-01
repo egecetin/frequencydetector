@@ -10,8 +10,8 @@ extern "C" {
 	#include <libavformat/avformat.h>
 
 	// Definitions
-	#define STREAM_LIMIT 24
-	#define EXTEND_BUFFER_IN_SEC 1
+	#define STREAM_LIMIT			 24
+	#define EXTEND_BUFFER_IN_SEC	0.5
 	
 	struct AudioReader_s
 	{

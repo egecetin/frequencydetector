@@ -4,8 +4,6 @@
 #include "audioreader.h"
 
 #include <QMainWindow>
-
-
 //#include <QCustomPlot> // Wait for 5.14 release
 
 class MainWindow : public QMainWindow
