@@ -10,7 +10,8 @@ extern "C" {
 	#include <libavformat/avformat.h>
 
 	// Definitions
-	#define CHANNEL_LIMIT 24
+	#define STREAM_LIMIT 24
+	#define EXTEND_BUFFER_IN_SEC 1
 	
 	struct AudioReader_s
 	{
@@ -33,16 +34,17 @@ extern "C" {
 	{
 		int nChannel;
 		int dataLen;
-		int64_t **channelData;
+		double **channelData;
 	};	
 	typedef struct StreamData_s StreamData;
 
 	struct AudioData_s
 	{
-		int nStream;		
+		int nStream;
 		StreamData *data;
 	};
 	typedef struct AudioData_s AudioData;
+	const AudioData AudioData_Default = { 0, NULL };
 
 	// Functions
 	int initAudioReaderStruct(char* filename, AudioReader* ctx);

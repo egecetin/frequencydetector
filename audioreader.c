@@ -56,7 +56,7 @@ int initAudioReaderStruct(char *filename, AudioReader *ctx)
 			continue;
 		}
 
-		ctx->codecContexts[i]->request_sample_fmt = av_get_alt_sample_fmt(ctx->codecContexts[i]->sample_fmt, 0);
+		ctx->codecContexts[i]->request_sample_fmt = av_get_alt_sample_fmt(ctx->codecContexts[i]->sample_fmt, 1);
 
 		// Init decoder
 		buff = avcodec_open2(ctx->codecContexts[i], ctx->codecTypes[i], NULL);	
@@ -142,14 +142,14 @@ void deinitAudioReaderStruct(AudioReader * ctx)
 int* findAudioStreams(AVFormatContext* formatCtx, int *n)
 {
 	int j = 0;
-	int* audioStreamIndex = (int*)av_malloc(sizeof(int) * CHANNEL_LIMIT);
+	int* audioStreamIndex = (int*)av_malloc(sizeof(int) * STREAM_LIMIT);
 	
 	for (size_t i = 0; i < formatCtx->nb_streams; ++i) {
 		if (formatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			audioStreamIndex[j] = i;
 			++j;
 		}
-		if (j >= CHANNEL_LIMIT)
+		if (j >= STREAM_LIMIT)
 			break;
 	}	
 	audioStreamIndex = (int*)av_realloc(audioStreamIndex, sizeof(int)*j);	
@@ -173,21 +173,22 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 {
 	int err = 0;
 	int *currPos = NULL;
-	AVFrame* frame = NULL;
+	AVFrame* frame = NULL;	
 	AVPacket packet;
 
 	// Init variables
+	deallocAudioData(data); // Clear previous contents
+	if (err = allocateAudioData(data, *ctx), err)
+		goto cleanup;
+
 	av_init_packet(&packet);
 	frame = av_frame_alloc();
-	// <-------------------- Allocate currPos
+	currPos = (int*)av_calloc(data->nStream, sizeof(int));
 	if (!(frame && currPos)) {
 		err = AVERROR_UNKNOWN;
 		goto cleanup;
 	}
-	deallocAudioData(data); // Clear previous contents
-	if (err = allocateAudioData(data, *ctx), err)
-		goto cleanup;
-	
+
 	while (!(err = av_read_frame(ctx->formatContext, &packet))) {
 
 		err = -1;
@@ -200,21 +201,172 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 				// Receive the packet
 				while (!(err = avcodec_receive_frame(ctx->codecContexts[i], frame))) {
 
-					// Planar format
-					if (av_sample_fmt_is_planar(ctx->codecContexts[i]->sample_fmt)) {
+					if (av_sample_fmt_is_planar(ctx->codecContexts[i]->sample_fmt)) { // Planar format
 						for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-							frame->extended_data[j];
-							frame->nb_samples;
+							int posBuff = currPos[i];
+							double *ptr = data->data[i].channelData[j];							
 							
+							// Interpret data
+							switch (ctx->codecContexts[i]->sample_fmt)
+							{
+							case AV_SAMPLE_FMT_U8P:
+							{
+								uint8_t *pdata = frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									ptr[posBuff] -= 127; // Unsigned to signed
+									++posBuff;
+								}
+								break;
+							}
+							case AV_SAMPLE_FMT_S16P:
+							{
+								int16_t *pdata = (int16_t*)frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+								break;
+							}
+							case AV_SAMPLE_FMT_S32P:
+							{
+								int32_t *pdata = (int32_t*)frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}								
+								break;
+							}
+							case AV_SAMPLE_FMT_S64P:
+							{
+								int64_t *pdata = (int64_t*)frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+								break;
+							}
+							case AV_SAMPLE_FMT_FLTP:
+							{
+								float *pdata = (float*)frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+								break;
+							}
+							case AV_SAMPLE_FMT_DBLP:
+							{
+								double *pdata = (double*)frame->extended_data[j];
+								for (int k = 0; k < frame->nb_samples; ++k) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+								break;
+							}
+							default:
+								err = AVERROR_UNKNOWN;
+								goto cleanup;
+							}
 						}
+					}					
+					else { // Packed format
+						
+						switch (ctx->codecContexts[i]->sample_fmt)
+						{
+						case AV_SAMPLE_FMT_U8:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								uint8_t *pdata = frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
 
+								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									ptr[posBuff] -= 127; // Unsigned to signed
+									++posBuff;
+								}
+							}
+							break;
+						}
+						case AV_SAMPLE_FMT_S16:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								int16_t *pdata = (int16_t*)frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
+
+								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+							}
+							break;
+						}
+						case AV_SAMPLE_FMT_S32:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								int32_t *pdata = (int32_t*)frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
+
+								for (int k = j; k < frame->nb_samples * ctx->codecContexts[i]->channels; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+							}
+							break;
+						}
+						case AV_SAMPLE_FMT_S64:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								int64_t *pdata = (int64_t*)frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
+
+								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+							}
+							break;
+						}
+						case AV_SAMPLE_FMT_FLT:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								float *pdata = (float*)frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
+
+								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+							}
+							break;
+						}
+						case AV_SAMPLE_FMT_DBL:
+						{
+							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
+								int posBuff = currPos[i];
+								double *pdata = (double*)frame->extended_data[0];
+								double *ptr = data->data[i].channelData[j];
+
+								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
+									ptr[posBuff] = pdata[k];
+									++posBuff;
+								}
+							}
+							break;
+						}
+						default:
+							err = AVERROR_UNKNOWN;
+							goto cleanup;
+						}
+						
 					}
-					// Packed format
-					else {
-
-					}
-
-
+					// Move cursor
+					currPos[i] += frame->nb_samples;
 					// Free frame.
 					av_frame_unref(frame);
 				}
@@ -228,8 +380,9 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 
 cleanup:
 	av_frame_free(&frame);
+	av_free(currPos);
 
-	if (err) {
+	if (err && (err!=AVERROR_EOF)) {
 		deallocAudioData(data);
 	}
 
@@ -250,14 +403,14 @@ int allocateAudioData(AudioData *audio, AudioReader ctx)
 		return AVERROR_UNKNOWN;
 	
 	for (int i = 0; i < ctx.nStream; ++i) {
-		audio->data[i].dataLen = (ctx.formatContext->duration / AV_TIME_BASE)*ctx.codecContexts[i]->sample_rate;
+		audio->data[i].dataLen = (ctx.formatContext->duration / AV_TIME_BASE + EXTEND_BUFFER_IN_SEC)*ctx.codecContexts[i]->sample_rate;
 		audio->data[i].nChannel = ctx.codecContexts[i]->channels;
-		audio->data[i].channelData = (int64_t**)av_malloc(audio->data[i].nChannel * sizeof(int64_t*));
+		audio->data[i].channelData = (double**)av_malloc(audio->data[i].nChannel * sizeof(double*));
 		if (!audio->data[i].channelData)
 			return AVERROR_UNKNOWN;
 
 		for (int j = 0; j < audio->data[i].nChannel; ++j) {
-			audio->data[i].channelData[j] = (int64_t*)av_malloc(audio->data[i].dataLen * sizeof(int64_t));
+			audio->data[i].channelData[j] = (double*)av_malloc(audio->data[i].dataLen * sizeof(double));
 			if (!audio->data[i].channelData[j])
 				return AVERROR_UNKNOWN;
 		}
@@ -282,8 +435,12 @@ void deallocAudioData(AudioData *audio)
 		audio->data[i].nChannel = 0;
 		audio->data[i].dataLen = 0;
 	}
-	av_free(audio->data->channelData);
-	audio->data->channelData = NULL;
+
+	if (audio->data) {
+		av_free(audio->data->channelData);
+		audio->data->channelData = NULL;
+	}
+
 	av_free(audio->data);
 	audio->data = NULL;
 	audio->nStream = 0;
