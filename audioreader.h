@@ -11,7 +11,7 @@ extern "C" {
 
 	// Definitions
 	#define STREAM_LIMIT			 24
-	#define EXTEND_BUFFER_IN_SEC	0.5
+	#define EXTEND_BUFFER_IN_SEC	  1
 	
 	struct AudioReader_s
 	{

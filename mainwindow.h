@@ -2,9 +2,15 @@
 #define MAINWINDOW_H
 
 #include "audioreader.h"
+#include "QCustomPlot/qcustomplot.h"
 
 #include <QMainWindow>
-//#include <QCustomPlot> // Wait for 5.14 release
+
+#include <qboxlayout.h>
+#include <qspinbox.h>
+#include <qwidget.h>
+#include <qlabel.h>
+#include <qframe.h>
 
 class MainWindow : public QMainWindow
 {
@@ -12,9 +18,28 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow(QWidget *parent = nullptr);
-
-
-
+	void retranslateUi();
     ~MainWindow();
+
+private:
+	/********** Objects **********/
+	QWidget *mainWidget;
+	QWidget *timeplotWidget;
+	QWidget *freqplotWidget;
+	QWidget *detectplotWidget;
+	QWidget *fftplotWidget;
+
+	QCustomPlot *timePlot;
+	QCustomPlot *freqPlot;
+	QCustomPlot *detectPlot;
+	QCustomPlot *fftPlot;
+
+	QFrame *line;
+	QFrame *menu;
+
+	/********** Layouts **********/
+	QHBoxLayout *mainHLayout;
+	QVBoxLayout *mainPlotLayout;
+	QVBoxLayout *mainMenuLayout;
 };
 #endif // MAINWINDOW_H

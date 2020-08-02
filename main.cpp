@@ -3,6 +3,7 @@
 #include <QApplication>
 
 #include <qdebug.h>
+#include <qglobal.h>
 
 int main(int argc, char *argv[])
 {
