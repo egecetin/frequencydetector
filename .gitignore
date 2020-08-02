@@ -429,6 +429,7 @@ Thumbs.db
 *.dll
 *.exe
 
+/QCustomplot
 /paralel.txt
 /out.txt
 /log.txt
