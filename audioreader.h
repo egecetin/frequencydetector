@@ -46,13 +46,18 @@ extern "C" {
 	typedef struct AudioData_s AudioData;
 	const AudioData AudioData_Default = { 0, NULL };
 
-	// Functions
+	// Allocations
 	int initAudioReaderStruct(char* filename, AudioReader* ctx);
-	void deinitAudioReaderStruct(AudioReader *ctx);
+	int allocateAudioData(AudioData *audio, AudioReader ctx);
+
+	// Functions	
 	int* findAudioStreams(AVFormatContext* formatCtx, int* n);
 	int readAudioFile(AudioReader *ctx, AudioData *data);
-	int allocateAudioData(AudioData *audio, AudioReader ctx);
-	void deallocAudioData(AudioData *audio);	
+	double** getDataPointers(AudioData *data, int *len);
+
+	// Deallocations
+	void deinitAudioReaderStruct(AudioReader *ctx);
+	void deallocAudioData(AudioData *audio);
 
 	// Debug functions
 	void printStreamInformation(const AVFormatContext *ctx, const AVCodec* codec, const AVCodecContext* codecCtx, int audioStreamIndex);

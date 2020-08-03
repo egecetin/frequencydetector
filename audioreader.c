@@ -447,6 +447,41 @@ void deallocAudioData(AudioData *audio)
 }
 
 /** ##############################################################################################################
+	Deallocates AudioData structure and its subcontents
+
+	Input;
+		data	: AudioData structure
+	Output;
+		len		: Output length
+		retval	: Array of pointers to all channels (Only free double pointer!!!)
+*/
+double** getDataPointers(AudioData *data, int *len)
+{
+	double **out = NULL;
+	int total = 0;
+	
+	for (int i = 0; i < data->nStream; ++i) {
+		total += data->data[i].nChannel;
+	}
+
+	out = (double**)malloc(total * sizeof(double*));
+	if (!out)
+		return NULL;
+
+	total = 0;
+	for (int i = 0; i < data->nStream; ++i) {
+		for (int j = 0; j < data->data[i].nChannel; ++j) {
+			out[total] = data->data[i].channelData[j];
+			++(total);
+		}
+	}
+
+	*len = total;
+
+	return out;
+}
+
+/** ##############################################################################################################
 	Print information to file
 
 	Input;

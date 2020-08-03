@@ -29,7 +29,8 @@ extern "C" {
 	
 	extern double threshold_alpha;	// Multiplier for threshold
 	extern double thresh_influence;	// Divider for detected point
-		
+
+	extern DFTI_DESCRIPTOR_HANDLE *fft; // FFT descriptor		
 	
 	/* ##################### Functions ##################### */
 	
@@ -42,8 +43,12 @@ extern "C" {
 
 	// Processing
 	ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* window, int wlen, int overlap, int bits);
+	double* calculateFFT_MKL(double *data, double *window, int dataLen, DFTI_DESCRIPTOR_HANDLE *fft);
 	double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n, double *th_values);
-	double* estimate_freq(double *data, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values);
+	double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values);
+
+	// Helper
+	ERR_STATUS seperateData(double **data, int ndata, int dataLen);
 
 #ifdef __cplusplus
 }

@@ -7,7 +7,6 @@
 #include <QMainWindow>
 
 #include <qboxlayout.h>
-#include <qspinbox.h>
 #include <qwidget.h>
 #include <qlabel.h>
 #include <qframe.h>
@@ -36,6 +35,7 @@ private:
 
 	QFrame *line;
 	QFrame *menu;
+	QFrame *subMenu;
 
 	/********** Layouts **********/
 	QHBoxLayout *mainHLayout;

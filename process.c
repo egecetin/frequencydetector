@@ -9,6 +9,7 @@ int currentSize;
 int desiredSize;
 double threshold_alpha;
 double thresh_influence;
+DFTI_DESCRIPTOR_HANDLE *fft = NULL;
 
 /** ##############################################################################################################
 	Init window vectors from MAX_WLEN to MIN_WLEN every power of 2 for Hanning, Hamming, Rectangle, Blackman and Bartlett. 
@@ -89,6 +90,12 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 		free(fBuffer);
 		fBuffer = NULL;
 	}
+	if (fft) {
+		DftiFreeDescriptor(fft);
+		MKL_free(fft);
+		fft = NULL;
+	}
+	
 
 	// Set variables
 	threshold_alpha = thresh_alpha;
@@ -99,6 +106,8 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 	desiredSize = nwin;
 
 	// Allocate data
+	fft = (DFTI_DESCRIPTOR_HANDLE*)MKL_malloc(sizeof(DFTI_DESCRIPTOR_HANDLE), 64);
+	createFFT_MKL(fft, wlen);
 	fBuffer = (double**)malloc(desiredSize * sizeof(double*));
 	for (int i = 0; i < desiredSize; ++i) {
 		fBuffer[i] = (double*)malloc(fBuffLen * sizeof(double));
@@ -386,11 +395,46 @@ cleanup:
 	return status;
 }
 
+double* calculateFFT_MKL(double *data, double *window, int dataLen, DFTI_DESCRIPTOR_HANDLE *fft)
+{
+	ERR_STATUS status = DFTI_NO_ERROR;
+
+	double* buff = (double*)MKL_malloc(dataLen * sizeof(double), 64);
+	double* out = (double*)MKL_malloc(dataLen / 2 * sizeof(double), 64);
+	MKL_Complex16* fdata = (MKL_Complex16*)MKL_malloc((dataLen / 2 + 1) * sizeof(MKL_Complex16), 64);
+	if (!(buff && fdata && out)) {	// Check memory
+		status = DFTI_MEMORY_ERROR;
+		goto cleanup;
+	}
+
+	vdMul(dataLen, data, window, buff);	// Multiply with window
+	
+	status = DftiCommitDescriptor(*fft); // Commit DFT
+	if (status && !DftiErrorClass(status, DFTI_NO_ERROR))
+		goto cleanup;
+	status = DftiComputeForward(*fft, buff, fdata); // Compute DFT
+	if (status && !DftiErrorClass(status, DFTI_NO_ERROR))
+		goto cleanup;
+
+	vzAbs(dataLen / 2 + 1, fdata, out); // Find magnitude
+
+cleanup:
+	if (status) {
+		MKL_free(out);
+		out = NULL;
+	}
+
+	MKL_free(buff);
+	MKL_free(fdata);
+
+	return out;
+}
+
 /** ##############################################################################################################
 	Threshold the data
 
 	Input;
-		data		: Input 1-D data
+		data		: Input 1-D data frequency data
 		dataLen		: Length of data vector
 		lag			: Moving window length
 		threshold	: Multiplier for thresholding
@@ -447,6 +491,7 @@ cleanup:
 
 	Input;
 		data		: Input 1-D data
+		window		: Window vector for multiply
 		pSpec		: Spec for filtering
 		pBuffer		: Buffer for filtering
 	Output;
@@ -454,31 +499,99 @@ cleanup:
 		th_values	: (Optional) Threshold values. Can be NULL if not needed
 		retval		: Indexes of accepted points
 */
-double* estimate_freq(double *data, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values)
+double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values)
 {
+	double *freqBuff;
+	double *buff = (double*)MKL_malloc(fBuffLen * 2 * sizeof(double), 64);
+	if (!buff)
+		return NULL;
+
 	if (currentSize < desiredSize) { // Initialization
-		cblas_dcopy(fBuffLen, data, 1, *position, 1);								// Copy data to vector
-		ippsFIRSR_64f(*position, *position, fBuffLen, pSpec, NULL, NULL, pBuffer);  // Filter data
-		vdAdd(fBuffLen, sumBuffer, data, sumBuffer);								// Add to sum
-		
+
+		cblas_dcopy(fBuffLen * 2, data, 1, buff, 1);		// Copy data to buffer
+		ippsFIRSR_64f(buff, buff, fBuffLen * 2, pSpec, NULL, NULL, pBuffer);
+		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
+
+		cblas_dcopy(fBuffLen, freqBuff, 1, *position, 1);	// Copy data to vector
+		vdAdd(fBuffLen, sumBuffer, freqBuff, sumBuffer);	// Add to sum
+
 		++currentSize;
 		if (++position - fBuffer > desiredSize)
 			position = fBuffer;
 		
+		MKL_free(freqBuff);
+		MKL_free(buff);
 		*size = 0;
 		return NULL;
 	}
 	else { // If buffer is full
 		double *out = thresholding(sumBuffer, fBuffLen, lagLen, threshold_alpha, thresh_influence, size, th_values);
 
-		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);							// Subtract old data from sum
-		cblas_dcopy(fBuffLen, data, 1, *position, 1);								// Overwrite it
-		ippsFIRSR_64f(*position, *position, fBuffLen, pSpec, NULL, NULL, pBuffer);	// Filter new data
-		vdAdd(fBuffLen, sumBuffer, *position, sumBuffer);							// Add to sum
+		cblas_dcopy(fBuffLen * 2, data, 1, buff, 1);		// Copy data to buffer
+		ippsFIRSR_64f(buff, buff, fBuffLen * 2, pSpec, NULL, NULL, pBuffer);
+		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
+
+		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);	// Subtract old data from sum
+		cblas_dcopy(fBuffLen, freqBuff, 1, *position, 1);	// Overwrite data
+		vdAdd(fBuffLen, sumBuffer, freqBuff, sumBuffer);	// Add to sum
+
 		if (++position - fBuffer > desiredSize)
 			position = fBuffer;	
-			
+		
+		MKL_free(freqBuff);
+		MKL_free(buff);
 		return out;
 	}
+}
+
+/** ##############################################################################################################
+	Prepare data for plotting
+
+	Input;
+		ndata		: First dimension of data
+		dataLen		: Length of the data
+	Output;
+		data		: Modified data
+		retval		: Error code
+*/
+ERR_STATUS seperateData(double **data, int ndata, int dataLen)
+{
+	ERR_STATUS status = 0;
+
+	double adder = 0;
+	double *min = (double*)MKL_malloc(ndata * sizeof(double), 64);
+	double *max = (double*)MKL_malloc(ndata * sizeof(double), 64);
+	if (!(min && max))
+		return ippStsMemAllocErr;
+
+	for (int i = 0; i < ndata; ++i) {
+		double *ptr = data[i];
+		double mean = 0;
+		int idx = 0;
+
+		status = ippsMean_64f(ptr, dataLen, &mean);	// Find mean
+		if (status)
+			return status;
+		status = ippsSubC_64f_I(mean, ptr, dataLen); // Sub mean
+		if (status)
+			return status;
+
+		idx = cblas_idamax(dataLen, ptr, 1); // Find max
+		max[i] = ptr[idx];
+
+		idx = cblas_idamin(dataLen, ptr, 1); // Find min
+		min[i] = ptr[idx];
+	}
+
+	vdSub(ndata, max, min, max);
+	adder = max[cblas_idamax(dataLen, max, 1)] * 1.1;
+
+	for (int i = 0; i < ndata; ++i) { // Seperate
+		status = ippsAddC_64f_I(adder*i, data[i], dataLen);
+		if (status)
+			return status;
+	}
+
+	return status;
 }
 
