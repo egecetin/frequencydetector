@@ -378,6 +378,8 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 		av_packet_unref(&packet);
 	}
 
+	// Drain contexts !!!!!!!!!!!!!!!!
+
 cleanup:
 	av_frame_free(&frame);
 	av_free(currPos);
