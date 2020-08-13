@@ -19,8 +19,11 @@ MainWindow::MainWindow(QWidget *parent)
 	nwinLabel = new QLabel;
 	infLabel = new QLabel;
 	alphaLabel = new QLabel;
+	channelLabel = new QLabel;
+	path = new QLabel;
 
 	wlenBox = new QComboBox;
+	channelBox = new QComboBox;
 	nwinBox = new QSpinBox;
 	infBox = new QDoubleSpinBox;
 	alphaBox = new QDoubleSpinBox;
@@ -30,16 +33,22 @@ MainWindow::MainWindow(QWidget *parent)
 	radio_high = new QRadioButton;
 	radio_pass = new QRadioButton;
 	radio_stop = new QRadioButton;
+	selectButton = new QPushButton;
 
 	mainHLayout = new QHBoxLayout;
 	mainPlotLayout = new QVBoxLayout;
 	mainMenuLayout = new QVBoxLayout;
 	subMenuLayout = new QVBoxLayout;
 
-	wlenBoxLayout = new QHBoxLayout;
+	selectButtonLayout = new QHBoxLayout;
+	channelBoxLayout = new QHBoxLayout; 
+	wlenBoxLayout = new QHBoxLayout;	
 	nwinBoxLayout = new QHBoxLayout;
 	infBoxLayout = new QHBoxLayout;
 	alphaBoxLayout = new QHBoxLayout;
+
+	spacer1 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
+	spacer2 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 
 	// Prepare left side plots
 	timePlot->setParent(mainWidget);
@@ -108,13 +117,28 @@ MainWindow::MainWindow(QWidget *parent)
 	line->setFrameShadow(QFrame::Sunken);
 	line->setFrameShape(QFrame::HLine);
 	
-	// wlenBox <-------------------
+	path->setParent(menu);
+	path->setStyleSheet("color: rgb(192, 192, 192)");
+
+	selectButton->setParent(menu);
+	selectButton->setStyleSheet("color: rgb(192, 192, 192)");
+	selectButtonLayout->addSpacerItem(spacer1);
+	selectButtonLayout->addWidget(selectButton);
+	selectButtonLayout->addSpacerItem(spacer2);
+
+	channelLabel->setParent(menu);
+	channelLabel->setStyleSheet("color: rgb(192, 192, 192)");
+	channelBox->setParent(menu);
+	channelBox->setStyleSheet("color: rgb(192, 192, 192)");
+	channelBoxLayout->addWidget(channelLabel, 6);
+	channelBoxLayout->addWidget(channelBox, 4);
+
 	wlenLabel->setParent(menu);
 	wlenLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	wlenBox->setParent(menu);
 	wlenBox->setStyleSheet("color: rgb(192, 192, 192)");
 	for (int i = 0; i < log2(MAX_WLEN) - log2(MIN_WLEN) + 1; ++i) {
-		wlenBox->addItem(QString::number(MAX_WLEN / pow(2, i / 5)));
+		wlenBox->addItem(QString::number(MAX_WLEN / pow(2, i)));
 	}
 	wlenBoxLayout->addWidget(wlenLabel, 6);
 	wlenBoxLayout->addWidget(wlenBox, 4);
@@ -154,6 +178,9 @@ MainWindow::MainWindow(QWidget *parent)
 	alphaBoxLayout->addWidget(alphaLabel, 6);
 	alphaBoxLayout->addWidget(alphaBox, 4);
 
+	subMenuLayout->addWidget(path);
+	subMenuLayout->addLayout(selectButtonLayout);
+	subMenuLayout->addLayout(channelBoxLayout);
 	subMenuLayout->addLayout(wlenBoxLayout);
 	subMenuLayout->addLayout(nwinBoxLayout);
 	subMenuLayout->addLayout(infBoxLayout);
@@ -190,6 +217,9 @@ void MainWindow::retranslateUi()
 {
 	fftPlot->xAxis->setLabel(tr("Frequency"));
 	detectPlot->xAxis->setLabel(tr("Time"));
+	path->setText(tr(""));
+	selectButton->setText(tr("Select File"));
+	channelLabel->setText(tr("Channel :"));
 	wlenLabel->setText(tr("Window length :"));
 	nwinLabel->setText(tr("Window number :"));
 	infLabel->setText(tr("Influence :"));

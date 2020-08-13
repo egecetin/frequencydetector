@@ -17,9 +17,9 @@
 
 ## General Info
 
-This program aims to detect signals which have constant frequency content such as modulated signals and/or machine driven noises. Since it is based on simple mathematical and vectoral operations, high performance (real-time) results can be obtained. Mathematical background of the algorithm can be found at [Mathematical Expressions Section](#mathematical-expressions).
+This program aims to detect signals which have constant frequency content such as modulated signals and/or machine driven noises. Since it is based on simple mathematical and vectoral operations, high performance (real-time) results can be obtained. Mathematical background of the algorithm can be found at [Mathematical Expressions Section](#mathematical-expressions). All of these processing functions can be found at [process.h](/process.h)/[process.c](/process.c).
 
-During the development process FFMpeg 4.3 Windows Build and Intel Performance Libraries used. You can find this FFMpeg package at [Windows builds by Zeranoe](https://ffmpeg.zeranoe.com/builds/). Additionally Qt 5.14.2 and [QCustomPlot](https://www.qcustomplot.com/index.php) used for the user interface. Explanation of the user interface will be given at [Interface Section](#interface) with screenshots.
+During the development process FFmpeg 4.3 Windows Build and Intel Performance Libraries used. You can find this FFmpeg package at [Windows builds by Zeranoe](https://ffmpeg.zeranoe.com/builds/). Additionally Qt 5.14.2 and [QCustomPlot](https://www.qcustomplot.com/index.php) used for the user interface. Explanation of the user interface will be given at [Interface Section](#interface) with screenshots.
 
 ## Mathematical Expressions
 
@@ -27,7 +27,7 @@ Will be explained later...
 
 ## Supported Formats
 
-Since FFMpeg library used for reading audio file lots of video/audio file formats are supported. You can find the list of supported formats with "ffmpeg -formats" command but some examples,
+Since FFmpeg library used for reading audio file lots of video/audio file formats are supported. You can find the list of supported formats with "ffmpeg -formats" command but some examples,
 
 * mp3
 * wav

@@ -8,6 +8,7 @@
 #include <QMainWindow>
 
 #include <qbuttongroup.h>
+#include <qlayoutitem.h>
 #include <qboxlayout.h>
 #include <qspinbox.h>
 #include <qwidget.h>
@@ -64,8 +65,11 @@ private:
 	QLabel *nwinLabel;
 	QLabel *infLabel;
 	QLabel *alphaLabel;
+	QLabel *channelLabel;
+	QLabel *path;
 
 	QComboBox *wlenBox;
+	QComboBox *channelBox;
 	QSpinBox *nwinBox;
 	QDoubleSpinBox *infBox;
 	QDoubleSpinBox *alphaBox;	
@@ -75,13 +79,19 @@ private:
 	QRadioButton *radio_high;
 	QRadioButton *radio_pass;
 	QRadioButton *radio_stop;
+	QPushButton *selectButton;
 
 	/********** Layouts **********/
+	QSpacerItem *spacer1;
+	QSpacerItem *spacer2;
+
 	QHBoxLayout *mainHLayout;
 	QVBoxLayout *mainPlotLayout;
 	QVBoxLayout *mainMenuLayout;
 	QVBoxLayout *subMenuLayout;
 
+	QHBoxLayout *selectButtonLayout;
+	QHBoxLayout *channelBoxLayout;
 	QHBoxLayout *wlenBoxLayout;
 	QHBoxLayout *nwinBoxLayout;
 	QHBoxLayout *infBoxLayout;
