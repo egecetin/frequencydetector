@@ -1,5 +1,8 @@
 #include "audioreader.h"
 
+AudioReader AudioReader_Default = { {'\0'}, 0, NULL, NULL, NULL, NULL };
+AudioData AudioData_Default = { 0, NULL };
+
 /** ##############################################################################################################
 	Initializes the context for audio read
 
@@ -191,194 +194,37 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 
 	while (!(err = av_read_frame(ctx->formatContext, &packet))) {
 
-		err = -1;
 		for (int i = 0; i < ctx->nStream; ++i) {
 
 			// Find corresponding index
 			if (ctx->audioStreamIndexes[i] == packet.stream_index) {
 
-				err = avcodec_send_packet(ctx->codecContexts[i], &packet); // Send to decode				
+				err = avcodec_send_packet(ctx->codecContexts[i], &packet); // Send to decode
+				if (err)
+					goto cleanup;
+
 				// Receive the packet
-				while (!(err = avcodec_receive_frame(ctx->codecContexts[i], frame))) {
+				err = receivePackets(ctx, i, data, currPos, frame);
 
-					if (av_sample_fmt_is_planar(ctx->codecContexts[i]->sample_fmt)) { // Planar format
-						for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-							int posBuff = currPos[i];
-							double *ptr = data->data[i].channelData[j];							
-							
-							// Interpret data
-							switch (ctx->codecContexts[i]->sample_fmt)
-							{
-							case AV_SAMPLE_FMT_U8P:
-							{
-								uint8_t *pdata = frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									ptr[posBuff] -= 127; // Unsigned to signed
-									++posBuff;
-								}
-								break;
-							}
-							case AV_SAMPLE_FMT_S16P:
-							{
-								int16_t *pdata = (int16_t*)frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-								break;
-							}
-							case AV_SAMPLE_FMT_S32P:
-							{
-								int32_t *pdata = (int32_t*)frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}								
-								break;
-							}
-							case AV_SAMPLE_FMT_S64P:
-							{
-								int64_t *pdata = (int64_t*)frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-								break;
-							}
-							case AV_SAMPLE_FMT_FLTP:
-							{
-								float *pdata = (float*)frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-								break;
-							}
-							case AV_SAMPLE_FMT_DBLP:
-							{
-								double *pdata = (double*)frame->extended_data[j];
-								for (int k = 0; k < frame->nb_samples; ++k) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-								break;
-							}
-							default:
-								err = AVERROR_UNKNOWN;
-								goto cleanup;
-							}
-						}
-					}					
-					else { // Packed format
-						
-						switch (ctx->codecContexts[i]->sample_fmt)
-						{
-						case AV_SAMPLE_FMT_U8:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								uint8_t *pdata = frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									ptr[posBuff] -= 127; // Unsigned to signed
-									++posBuff;
-								}
-							}
-							break;
-						}
-						case AV_SAMPLE_FMT_S16:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								int16_t *pdata = (int16_t*)frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-							}
-							break;
-						}
-						case AV_SAMPLE_FMT_S32:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								int32_t *pdata = (int32_t*)frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples * ctx->codecContexts[i]->channels; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-							}
-							break;
-						}
-						case AV_SAMPLE_FMT_S64:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								int64_t *pdata = (int64_t*)frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-							}
-							break;
-						}
-						case AV_SAMPLE_FMT_FLT:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								float *pdata = (float*)frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-							}
-							break;
-						}
-						case AV_SAMPLE_FMT_DBL:
-						{
-							for (int j = 0; j < ctx->codecContexts[i]->channels; ++j) {
-								int posBuff = currPos[i];
-								double *pdata = (double*)frame->extended_data[0];
-								double *ptr = data->data[i].channelData[j];
-
-								for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[i]->channels) {
-									ptr[posBuff] = pdata[k];
-									++posBuff;
-								}
-							}
-							break;
-						}
-						default:
-							err = AVERROR_UNKNOWN;
-							goto cleanup;
-						}
-						
-					}
-					// Move cursor
-					currPos[i] += frame->nb_samples;
-					// Free frame.
-					av_frame_unref(frame);
-				}
-				if (err == AVERROR(EAGAIN))	// If eagain successfully received all packets
-					err = 0;
 				break;
 			}
 		}
 		av_packet_unref(&packet);
+		if (err)
+			break;
 	}
 
-	// Drain contexts !!!!!!!!!!!!!!!!
+	// Drain contexts
+	for (int i = 0; i < ctx->nStream; ++i) {
+		avcodec_send_packet(ctx->codecContexts[i], NULL);
+		if (err)
+			goto cleanup;
+
+		// Receive the packet
+		err = receivePackets(ctx, i, data, currPos, frame);
+		if (err)
+			break;
+	}
 
 cleanup:
 	av_frame_free(&frame);
@@ -395,7 +241,10 @@ cleanup:
 	Allocates AudioData structure and its subcontents
 
 	Input;
+		ctx		: AudioReader structure for file
 	Output;
+		audio	: Allocated data structure
+		retval	: Error value
 */
 int allocateAudioData(AudioData *audio, AudioReader ctx)
 {
@@ -425,6 +274,7 @@ int allocateAudioData(AudioData *audio, AudioReader ctx)
 	Deallocates AudioData structure and its subcontents
 
 	Input;
+		audio: AudioData structure
 	Output;
 */
 void deallocAudioData(AudioData *audio)
@@ -481,6 +331,194 @@ double** getDataPointers(AudioData *data, int *len)
 	*len = total;
 
 	return out;
+}
+
+/** ##############################################################################################################
+	Receives the packets and converts to data
+
+	Input;
+	Output;
+*/
+int receivePackets(AudioReader *ctx, int idx, AudioData *data, int *currPos, AVFrame *frame)
+{
+	int err = 0;
+
+	while (!(err = avcodec_receive_frame(ctx->codecContexts[idx], frame))) {
+
+		if (av_sample_fmt_is_planar(ctx->codecContexts[idx]->sample_fmt)) { // Planar format
+			for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+				int posBuff = currPos[idx];
+				double *ptr = data->data[idx].channelData[j];
+
+				// Interpret data
+				switch (ctx->codecContexts[idx]->sample_fmt)
+				{
+				case AV_SAMPLE_FMT_U8P:
+				{
+					uint8_t *pdata = frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						ptr[posBuff] -= 127; // Unsigned to signed
+						++posBuff;
+					}
+					break;
+				}
+				case AV_SAMPLE_FMT_S16P:
+				{
+					int16_t *pdata = (int16_t*)frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+					break;
+				}
+				case AV_SAMPLE_FMT_S32P:
+				{
+					int32_t *pdata = (int32_t*)frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+					break;
+				}
+				case AV_SAMPLE_FMT_S64P:
+				{
+					int64_t *pdata = (int64_t*)frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+					break;
+				}
+				case AV_SAMPLE_FMT_FLTP:
+				{
+					float *pdata = (float*)frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+					break;
+				}
+				case AV_SAMPLE_FMT_DBLP:
+				{
+					double *pdata = (double*)frame->extended_data[j];
+					for (int k = 0; k < frame->nb_samples; ++k) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+					break;
+				}
+				default:
+					err = AVERROR_UNKNOWN;
+					return err;
+				}
+			}
+		}
+		else { // Packed format
+
+			switch (ctx->codecContexts[idx]->sample_fmt)
+			{
+			case AV_SAMPLE_FMT_U8:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					uint8_t *pdata = frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						ptr[posBuff] -= 127; // Unsigned to signed
+						++posBuff;
+					}
+				}
+				break;
+			}
+			case AV_SAMPLE_FMT_S16:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					int16_t *pdata = (int16_t*)frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+				}
+				break;
+			}
+			case AV_SAMPLE_FMT_S32:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					int32_t *pdata = (int32_t*)frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples * ctx->codecContexts[idx]->channels; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+				}
+				break;
+			}
+			case AV_SAMPLE_FMT_S64:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					int64_t *pdata = (int64_t*)frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+				}
+				break;
+			}
+			case AV_SAMPLE_FMT_FLT:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					float *pdata = (float*)frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+				}
+				break;
+			}
+			case AV_SAMPLE_FMT_DBL:
+			{
+				for (int j = 0; j < ctx->codecContexts[idx]->channels; ++j) {
+					int posBuff = currPos[idx];
+					double *pdata = (double*)frame->extended_data[0];
+					double *ptr = data->data[idx].channelData[j];
+
+					for (int k = j; k < frame->nb_samples; k += ctx->codecContexts[idx]->channels) {
+						ptr[posBuff] = pdata[k];
+						++posBuff;
+					}
+				}
+				break;
+			}
+			default:
+				err = AVERROR_UNKNOWN;
+				return err;
+			}
+
+		}
+		// Move cursor
+		currPos[idx] += frame->nb_samples;
+		// Free frame.
+		av_frame_unref(frame);
+	}
+
+	if (err == AVERROR(EAGAIN))	// If eagain successfully received all packets
+		err = 0;
+
+	return err;
 }
 
 /** ##############################################################################################################

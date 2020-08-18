@@ -1,11 +1,12 @@
-#pragma once
+#ifndef PROCESS_H
+#define PROCESS_H
+
+#include "audioreader.h"
 
 #include <math.h>
 #include <ipp.h>
 #include <mkl.h>
 #include <omp.h>
-
-//#include "logger.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,7 +37,7 @@ extern "C" {
 	
 	// Initialization
 	Ipp64f** init_windows(void);
-	void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf);
+	void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf, IppFilterType filterType, double *rFreq, int tapsLen);
 	ERR_STATUS createFFT_IPP(IppsFFTSpec_R_64f** fft, Ipp8u** buffer, int order);
 	ERR_STATUS createFFT_MKL(DFTI_DESCRIPTOR_HANDLE *fft, int wlen);
 	ERR_STATUS createFilter(IppsFIRSpec_64f **pSpec, IppFilterType filterType, double *rFreq, int tapsLen, IppWinType windowType, Ipp8u **pBuffer);
@@ -46,10 +47,13 @@ extern "C" {
 	double* calculateFFT_MKL(double *data, double *window, int dataLen, DFTI_DESCRIPTOR_HANDLE *fft);
 	double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n, double *th_values);
 	double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values);
-
+	ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* window, int wlen, int overlap, int bits, double ***spectrogramData, double ***alarmData, int **alarmLengths, int *outputLength);
+	
 	// Helper
 	ERR_STATUS seperateData(double **data, int ndata, int dataLen);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

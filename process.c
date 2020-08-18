@@ -10,6 +10,8 @@ int desiredSize;
 double threshold_alpha;
 double thresh_influence;
 DFTI_DESCRIPTOR_HANDLE *fft = NULL;
+IppsFIRSpec_64f *filterSpec = NULL;
+Ipp8u *filterBuffer = NULL;
 
 /** ##############################################################################################################
 	Init window vectors from MAX_WLEN to MIN_WLEN every power of 2 for Hanning, Hamming, Rectangle, Blackman and Bartlett. 
@@ -75,13 +77,16 @@ cleanup:
 	Input;
 		wlen		: Window length of time data (Should be even)
 		nwin		: Desired number of windows
-		lagLen		: Lag amount for thresholding (Choose equal to number of filtered freq pts with high pass)
+		lag			: Lag amount for thresholding (Choose equal to number of filtered freq pts with high pass)
 		thresh_alpha: Multiplier for threshold
 		thresh_inf	: Divider for detected point
+		filterType	: Filter type
+		rFreq		: Cutoff frequencies of filter
+		tapsLen		: Degree of filter
 	Output;
 		
 */
-void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf)
+void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thresh_inf, IppFilterType filterType, double *rFreq, int tapsLen)
 {
 	if (fBuffer) { // Free if already allocated
 		for (int i = 0; i < desiredSize; ++i) {
@@ -94,6 +99,14 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 		DftiFreeDescriptor(fft);
 		MKL_free(fft);
 		fft = NULL;
+	}
+	if (filterBuffer) {
+		ippsFree(filterBuffer);
+		filterBuffer = NULL;
+	}
+	if (filterSpec) {
+		ippsFree((Ipp8u*)filterSpec);
+		filterSpec = NULL;
 	}
 	
 
@@ -112,6 +125,8 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 	for (int i = 0; i < desiredSize; ++i) {
 		fBuffer[i] = (double*)malloc(fBuffLen * sizeof(double));
 	}
+
+	createFilter(&filterSpec, filterType, rFreq, tapsLen, ippWinBlackman, &filterBuffer);
 
 	position = fBuffer;
 }
@@ -542,6 +557,38 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 		MKL_free(buff);
 		return out;
 	}
+}
+
+ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* window, int wlen, int overlap,
+						int bits, double ***spectrogramData, double ***alarmData, int **alarmLengths, int *outputLength)
+{
+	ERR_STATUS status = ippStsNoErr;
+	double *ptr = audio->data[streamIdx].channelData[channelIdx];
+	int dataLen = audio->data[streamIdx].dataLen;	
+	int shift = wlen - overlap;
+	int outLen = floor((dataLen - wlen) / (shift)) + 1;
+	int pos = 0, k = 0;
+
+	status = spectrogram(ptr, dataLen, spectrogramData, window, wlen, overlap, bits);
+	if (status)
+		return status;		
+
+	*alarmData = (double**)MKL_malloc(outLen * sizeof(double*), 64);
+	*alarmLengths = (int*)MKL_malloc(outLen * sizeof(int), 64);
+
+	if (!(alarmData && alarmLengths)) {
+		MKL_free(alarmData);
+		MKL_free(alarmLengths);
+		return ippStsMemAllocErr;
+	}
+
+	while (pos < shift) {
+		(*alarmData)[k] = estimate_freq(&ptr[pos], window, filterSpec, filterBuffer, (alarmLengths[k]), NULL);
+		pos += shift;
+	}
+
+	*outputLength = outLen;
+	return status;
 }
 
 /** ##############################################################################################################

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef AUDIOREADER_H
+#define AUDIOREADER_H
 
 #include <time.h>
 
@@ -26,9 +27,8 @@ extern "C" {
 		AVCodecContext** codecContexts;
 		AVCodec** codecTypes;
 	};
-
 	typedef struct AudioReader_s AudioReader;	
-	const AudioReader AudioReader_Default = { {'\0'}, 0, NULL, NULL, NULL, NULL };
+	extern AudioReader AudioReader_Default;
 
 	struct StreamData_s
 	{
@@ -44,7 +44,7 @@ extern "C" {
 		StreamData *data;
 	};
 	typedef struct AudioData_s AudioData;
-	const AudioData AudioData_Default = { 0, NULL };
+	extern AudioData AudioData_Default;
 
 	// Allocations
 	int initAudioReaderStruct(char* filename, AudioReader* ctx);
@@ -54,6 +54,7 @@ extern "C" {
 	int* findAudioStreams(AVFormatContext* formatCtx, int* n);
 	int readAudioFile(AudioReader *ctx, AudioData *data);
 	double** getDataPointers(AudioData *data, int *len);
+	int receivePackets(AudioReader *ctx, int idx, AudioData *data, int *currPos, AVFrame *frame);
 
 	// Deallocations
 	void deinitAudioReaderStruct(AudioReader *ctx);
@@ -65,4 +66,6 @@ extern "C" {
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

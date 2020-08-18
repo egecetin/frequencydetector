@@ -44,11 +44,31 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+	/********* Variables *********/
+#ifdef _WIN32
+	char filePath[FILENAME_MAX];
+#elif __linux__
+	char filePath[PATH_MAX];
+#endif // WIN32
+
+	/********* Functions *********/
     MainWindow(QWidget *parent = nullptr);
 	void retranslateUi();
     ~MainWindow();
 
 private:
+	/********* Variables *********/
+	AudioReader reader = AudioReader_Default;
+	AudioData audio = AudioData_Default;
+	Ipp64f** windowFunctions = NULL;
+	double** spectrogramData = NULL;
+	double** alarmsData = NULL;
+	int* alarmLengths = NULL;
+	int outputLength;
+	int streamIdx;
+	int channelIdx;
+	bool flag = true;
+
 	/********** Objects **********/
 	QWidget *mainWidget;
 
@@ -60,19 +80,28 @@ private:
 	QFrame *line;
 	QFrame *menu;
 	QFrame *subMenu;
+	QFrame *radioMenu;
 
 	QLabel *wlenLabel;
+	QLabel *overlapLabel;
+	QLabel *winTypeLabel;
 	QLabel *nwinLabel;
 	QLabel *infLabel;
 	QLabel *alphaLabel;
 	QLabel *channelLabel;
 	QLabel *path;
+	QLabel *lowFreqLabel;
+	QLabel *highFreqLabel;
 
 	QComboBox *wlenBox;
+	QComboBox *winTypeBox;
 	QComboBox *channelBox;
 	QSpinBox *nwinBox;
+	QSpinBox *overlapBox;
 	QDoubleSpinBox *infBox;
-	QDoubleSpinBox *alphaBox;	
+	QDoubleSpinBox *alphaBox;
+	QDoubleSpinBox *lowFreqBox;
+	QDoubleSpinBox *highFreqBox;
 
 	QButtonGroup *radioGroup;
 	QRadioButton *radio_low;
@@ -80,21 +109,34 @@ private:
 	QRadioButton *radio_pass;
 	QRadioButton *radio_stop;
 	QPushButton *selectButton;
+	QPushButton *plotButton;
 
 	/********** Layouts **********/
 	QSpacerItem *spacer1;
 	QSpacerItem *spacer2;
+	QSpacerItem *spacer3;
 
 	QHBoxLayout *mainHLayout;
 	QVBoxLayout *mainPlotLayout;
 	QVBoxLayout *mainMenuLayout;
 	QVBoxLayout *subMenuLayout;
+	QVBoxLayout *radioMenuLayout;
+	QVBoxLayout *cutFreqLayout;
 
+	QHBoxLayout *filterGroupLayout;
 	QHBoxLayout *selectButtonLayout;
 	QHBoxLayout *channelBoxLayout;
 	QHBoxLayout *wlenBoxLayout;
+	QHBoxLayout *overlapBoxLayout;
 	QHBoxLayout *nwinBoxLayout;
+	QHBoxLayout *winTypeBoxLayout;
 	QHBoxLayout *infBoxLayout;
 	QHBoxLayout *alphaBoxLayout;
+	QHBoxLayout *lowFreqBoxLayout;
+	QHBoxLayout *highFreqBoxLayout;
+
+	/********* Functions *********/	
+	void selectFile();
+	void updatePlots();
 };
 #endif // MAINWINDOW_H
