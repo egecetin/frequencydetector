@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
 {
 	//AudioReader reader = AudioReader_Default;
 	//AudioData audio = AudioData_Default;
-	//char filename[] = "C:\\Users\\egece\\Desktop\\01_This_Is_War_(Apex_Remix).flac";
+	//char filename[] = "D:\\VS_Repos\\Frequency Detector\\01_This_Is_War_(Apex_Remix).flac";
 	//char filename[] = "C:\\Users\\egece\\Desktop\\Alarm.wav";
 	
 	//initAudioReaderStruct(filename, &reader);

@@ -10,6 +10,7 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot = new QCustomPlot;
 	detectPlot = new QCustomPlot;
 	fftPlot = new QCustomPlot;
+	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
 	
 	line = new QFrame;
 	menu = new QFrame;
@@ -70,6 +71,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 	// Prepare left side plots
 	timePlot->setParent(mainWidget);
+	timePlot->setOpenGl(true);
 	timePlot->setBackground(QBrush(dark, Qt::SolidPattern));
 	timePlot->xAxis->setBasePen(QPen(silver));
 	timePlot->xAxis->setTickPen(QPen(silver));
@@ -81,8 +83,15 @@ MainWindow::MainWindow(QWidget *parent)
 	timePlot->yAxis->setSubTickPen(QPen(silver));
 	timePlot->yAxis->setTickLabelColor(Qt::white);
 	timePlot->yAxis->grid()->setVisible(false);
+	timePlot->addGraph();
+	timePlot->graph(0)->setPen(QPen(navy));
+	timePlot->graph(0)->setBrush(QBrush(navy));
+	timePlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+	connect(timePlot->xAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->xAxis2, SLOT(setRange(QCPRange)));
+	connect(timePlot->yAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->yAxis2, SLOT(setRange(QCPRange)));
 
 	freqPlot->setParent(mainWidget);
+	freqPlot->setOpenGl(true);
 	freqPlot->setBackground(QBrush(dark, Qt::SolidPattern));
 	freqPlot->xAxis->setBasePen(QPen(silver));
 	freqPlot->xAxis->setTickPen(QPen(silver));
@@ -92,8 +101,14 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot->yAxis->setTickPen(QPen(silver));
 	freqPlot->yAxis->setSubTickPen(QPen(silver));
 	freqPlot->yAxis->setTickLabelColor(Qt::white);
+	freqPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
+	freqPlot->axisRect()->setupFullAxesBox(true);
+
+	freqMap->setGradient(QCPColorGradient::gpThermal);
+	freqMap->setDataRange(QCPRange(-150, 0));
 
 	detectPlot->setParent(mainWidget);
+	detectPlot->setOpenGl(true);
 	detectPlot->setBackground(QBrush(dark, Qt::SolidPattern));
 	detectPlot->xAxis->setLabelColor(Qt::white);
 	detectPlot->xAxis->setBasePen(QPen(silver));
@@ -138,93 +153,72 @@ MainWindow::MainWindow(QWidget *parent)
 	path->setParent(menu);
 	path->setWordWrap(true);
 	path->setAlignment(Qt::AlignCenter);
-	path->setStyleSheet("color: rgb(192, 192, 192)");
 
 	selectButton->setParent(menu);
-	selectButton->setStyleSheet("color: rgb(192, 192, 192)");
 	plotButton->setParent(menu);
-	plotButton->setStyleSheet("color: rgb(192, 192, 192)");
 	selectButtonLayout->addSpacerItem(spacer1);
 	selectButtonLayout->addWidget(selectButton);
 	selectButtonLayout->addWidget(plotButton);
 	selectButtonLayout->addSpacerItem(spacer2);
 
 	channelLabel->setParent(menu);
-	channelLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	channelBox->setParent(menu);
-	channelBox->setStyleSheet("color: rgb(192, 192, 192)");
 	channelBoxLayout->addWidget(channelLabel, 6);
 	channelBoxLayout->addWidget(channelBox, 4);
 
 	winTypeLabel->setParent(menu);
-	winTypeLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	winTypeBox->setParent(menu);
-	winTypeBox->setStyleSheet("color: rgb(192, 192, 192)");
 	winTypeBoxLayout->addWidget(winTypeLabel, 6);
 	winTypeBoxLayout->addWidget(winTypeBox, 4);
 
 	nwinLabel->setParent(menu);
-	nwinLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	nwinBox->setParent(menu);
 	nwinBox->setSingleStep(1);
 	nwinBox->setMinimum(1);
 	nwinBox->setMaximum(100);
 	nwinBox->setAlignment(Qt::AlignRight);
-	nwinBox->setStyleSheet("color: rgb(192, 192, 192)");
 	nwinBoxLayout->addWidget(nwinLabel, 6);
 	nwinBoxLayout->addWidget(nwinBox, 4);
 
 	wlenLabel->setParent(menu);
-	wlenLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	wlenBox->setParent(menu);
-	wlenBox->setStyleSheet("color: rgb(192, 192, 192)");
 	wlenBoxLayout->addWidget(wlenLabel, 6);
 	wlenBoxLayout->addWidget(wlenBox, 4);
 
 	overlapLabel->setParent(menu);
-	overlapLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	overlapBox->setParent(menu);
 	overlapBox->setSingleStep(1);
 	overlapBox->setMinimum(1);
 	overlapBox->setMaximum(4095);
 	overlapBox->setAlignment(Qt::AlignRight);
-	overlapBox->setStyleSheet("color: rgb(192, 192, 192)");
 	overlapBoxLayout->addWidget(overlapLabel, 6);
 	overlapBoxLayout->addWidget(overlapBox, 4);
 
 	infLabel->setParent(menu);
-	infLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	infBox->setParent(menu);
 	infBox->setDecimals(4);
 	infBox->setSingleStep(0.0001);
 	infBox->setMinimum(0.0001);
 	infBox->setMaximum(100);
 	infBox->setAlignment(Qt::AlignRight);
-	infBox->setStyleSheet("color: rgb(192, 192, 192)");
 	infBoxLayout->addWidget(infLabel, 6);
 	infBoxLayout->addWidget(infBox, 4);
 
 	alphaLabel->setParent(menu);
-	alphaLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	alphaBox->setParent(menu);
 	alphaBox->setDecimals(4);
 	alphaBox->setSingleStep(0.0001);
 	alphaBox->setMinimum(0.0001);
 	alphaBox->setMaximum(100);
 	alphaBox->setAlignment(Qt::AlignRight);
-	alphaBox->setStyleSheet("color: rgb(192, 192, 192)");
 	alphaBoxLayout->addWidget(alphaLabel, 6);
 	alphaBoxLayout->addWidget(alphaBox, 4);
 
 	radioGroup->setParent(radioMenu);
 	radio_high->setParent(radioMenu);
-	radio_high->setStyleSheet("color: rgb(192, 192, 192)");
 	radio_low->setParent(radioMenu);
-	radio_low->setStyleSheet("color: rgb(192, 192, 192)");
 	radio_pass->setParent(radioMenu);
-	radio_pass->setStyleSheet("color: rgb(192, 192, 192)");
 	radio_stop->setParent(radioMenu);
-	radio_stop->setStyleSheet("color: rgb(192, 192, 192)");
 
 	radioMenu->setParent(menu);
 	radioMenu->setLineWidth(2);
@@ -237,26 +231,26 @@ MainWindow::MainWindow(QWidget *parent)
 	radioMenu->setLayout(radioMenuLayout);
 
 	lowFreqLabel->setParent(menu);
-	lowFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
+	//lowFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	lowFreqBox->setParent(menu);
 	lowFreqBox->setDecimals(4);
 	lowFreqBox->setSingleStep(0.0001);
 	lowFreqBox->setMinimum(0.0001);
 	lowFreqBox->setMaximum(1);
 	lowFreqBox->setAlignment(Qt::AlignRight);
-	lowFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
+	//lowFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
 	lowFreqBoxLayout->addWidget(lowFreqLabel);
 	lowFreqBoxLayout->addWidget(lowFreqBox);
 
 	highFreqLabel->setParent(menu);
-	highFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
+	//highFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	highFreqBox->setParent(menu);
 	highFreqBox->setDecimals(4);
 	highFreqBox->setSingleStep(0.0001);
 	highFreqBox->setMinimum(0.0001);
 	highFreqBox->setMaximum(1);
 	highFreqBox->setAlignment(Qt::AlignRight);
-	highFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
+	//highFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
 	highFreqBoxLayout->addWidget(highFreqLabel);
 	highFreqBoxLayout->addWidget(highFreqBox);
 
@@ -300,7 +294,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 	// Connect functions
 	connect(selectButton, &QPushButton::pressed, this, &MainWindow::selectFile);
-	connect(plotButton, &QPushButton::pressed, this, &MainWindow::updatePlots);
+	connect(plotButton, &QPushButton::pressed, this, [this]{ this->updatePlots(false); }, Qt::ConnectionType::QueuedConnection);
 
 	// Init processing
 	double rFreq = 200.0 / 2048;
@@ -308,7 +302,7 @@ MainWindow::MainWindow(QWidget *parent)
 	init_globalvar(4096, 8, 200, 3.5, 0.5, ippsHighPass, &rFreq, 16);
 
 	// Last changes
-	this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
+	// this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
 	this->setCentralWidget(mainWidget);
 	this->resize(QGuiApplication::primaryScreen()->geometry().width() / 1.3, QGuiApplication::primaryScreen()->geometry().height() / 1.3);
 	this->retranslateUi();
@@ -346,11 +340,14 @@ void MainWindow::retranslateUi()
 
 	// Set defaults
 	nwinBox->setValue(8);
+	winTypeBox->setCurrentIndex(0);
 	wlenBox->setCurrentIndex(3);
+	overlapBox->setValue(2048);
 	infBox->setValue(0.5);
 	alphaBox->setValue(3.5);
 	radio_high->setChecked(true);
 	lowFreqBox->setValue(200.0 / 2048);
+	highFreqBox->setValue(0.98);
 	highFreqBox->setEnabled(false);
 
 	this->setWindowTitle(tr("Frequency Detector"));
@@ -369,19 +366,22 @@ void MainWindow::selectFile()
 #ifdef _WIN32
 	memset(filePath, '\0', FILENAME_MAX);
 	strcpy_s(filePath, FILENAME_MAX, fileName.toStdString().c_str());
-#elif __linux__
+#else
 	memset(filePath, '\0', PATH_MAX);
 	strcpy(filePath, fileName.toStdString().c_str());
 #endif // WIN32
 	
-	// Trigger process
+	// Trigger processes
 	if (fileName.length())
-		updatePlots();
+		QMetaObject::invokeMethod(this, "updatePlots", Qt::ConnectionType::QueuedConnection, Q_ARG(bool, true));
+
 }
 
-void MainWindow::updatePlots()
+Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 {
 	ERR_STATUS status = 0;
+	disableButtons();
+	//updateValues();
 
 	if (flag) { // If file changed
 		// Dealloc memory
@@ -389,8 +389,8 @@ void MainWindow::updatePlots()
 		deallocAudioData(&audio);
 
 		// Read new file
-		initAudioReaderStruct(filePath, &reader);
-		readAudioFile(&reader, &audio);
+		status = initAudioReaderStruct(filePath, &reader);
+		status = readAudioFile(&reader, &audio);
 	}
 
 	if (spectrogramData) { // Clear previous data
@@ -411,6 +411,63 @@ void MainWindow::updatePlots()
 	else // Should not be reached
 		bits = 16;
 
-	//status = processFile(&audio, streamIdx, channelIdx, windowFunctions[winIdx], windowlength, overlap, bits, &spectrogramData, &alarmsData, &alarmLengths, &outputLength);
+	status = processFile(&audio, streamIdx, channelIdx, windowFunctions[winIdx], windowLength, overlap, bits, &spectrogramData, &alarmsData, &alarmLengths, &outputLength);
 
+	// Plot time data
+	double *x = (double*)malloc(audio.data->dataLen * sizeof(double));
+	double *y = audio.data->channelData[channelIdx];
+	for (size_t idx = 0; idx < audio.data->dataLen; ++idx)
+		x[idx] = idx;
+	QVector<double> vX(x, &x[audio.data->dataLen]);
+	QVector<double> vY(y, &y[audio.data->dataLen]);
+	timePlot->graph(0)->setData(vX, vY);
+	timePlot->graph(0)->rescaleAxes();
+	timePlot->replot();
+
+	// Plot spectrogram
+	int nX = floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1;
+	int nY = windowLength / 2 + 1;
+	freqMap->data()->setSize(floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1, windowLength / 2 + 1);
+	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
+	{
+		double *ptr = spectrogramData[idx];
+		for (size_t jdx = 0; jdx < windowLength / 2 + 1; ++jdx)
+		{
+			freqMap->data()->setCell(idx, jdx, ptr[jdx]);
+		}
+	}
+	freqMap->rescaleAxes();
+	freqPlot->replot();
+
+	enableButtons();
+}
+
+void MainWindow::updateValues()
+{
+}
+
+void MainWindow::enableButtons()
+{
+	selectButton->setEnabled(true);
+	plotButton->setEnabled(true);
+	
+	radio_low->setEnabled(true);
+	radio_high->setEnabled(true);
+	radio_pass->setEnabled(true);
+	radio_stop->setEnabled(true);
+
+	this->update();
+}
+
+void MainWindow::disableButtons()
+{
+	selectButton->setEnabled(false);
+	plotButton->setEnabled(false);
+
+	radio_low->setEnabled(false);
+	radio_high->setEnabled(false);
+	radio_pass->setEnabled(false);
+	radio_stop->setEnabled(false);
+
+	this->update();
 }

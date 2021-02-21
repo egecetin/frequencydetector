@@ -65,9 +65,11 @@ private:
 	double** alarmsData = NULL;
 	int* alarmLengths = NULL;
 	int outputLength;
-	int streamIdx;
-	int channelIdx;
-	bool flag = true;
+	int streamIdx = 0;
+	int channelIdx = 0;
+	int winIdx = 15;
+	int windowLength = 4096;
+	int overlap = 2048;
 
 	/********** Objects **********/
 	QWidget *mainWidget;
@@ -76,6 +78,8 @@ private:
 	QCustomPlot *freqPlot;
 	QCustomPlot *detectPlot;
 	QCustomPlot *fftPlot;
+
+	QCPColorMap *freqMap;
 
 	QFrame *line;
 	QFrame *menu;
@@ -137,6 +141,10 @@ private:
 
 	/********* Functions *********/	
 	void selectFile();
-	void updatePlots();
+	void updateValues();
+	void enableButtons();
+	void disableButtons();
+
+	Q_INVOKABLE void updatePlots(bool flag = false);
 };
 #endif // MAINWINDOW_H

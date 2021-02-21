@@ -59,7 +59,7 @@ Ipp64f** init_windows(void) {
 	}
 
 cleanup:
-	if (!status) {
+	if (status) {
 		for (int i = 0; i < 5 * (log2(MAX_WLEN) - log2(MIN_WLEN) + 1); ++i) {
 			ippsFree(arr[i]);
 		}
@@ -325,7 +325,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 	}
 
 	// Compute FFT
-	#pragma omp parallel for
+	//#pragma omp parallel for
 	for (int i = 0; i < outLen; ++i) {
 		if (!status) {
 			ERR_STATUS status_local = DFTI_NO_ERROR;
@@ -346,7 +346,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 				status = status_local;
 				continue;
 			}
-			
+
 			status_local = DftiCommitDescriptor(vfft[id]); // Commit DFT
 			if (status_local && !DftiErrorClass(status_local, DFTI_NO_ERROR)) {
 				#pragma omp critical
@@ -368,6 +368,14 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 				continue;
 			}
 
+			status_local = ippsAddC_64f_I(0.0001, out[i], wlen / 2 + 1); // Add eps
+			if (status_local)
+			{
+				#pragma omp critical
+				status = status_local;
+				continue;
+			}
+
 			cblas_dscal(wlen / 2 + 1, pow(2, -bits + 2), out[i], 1); // Normalize
 			vdLog10(wlen / 2 + 1, out[i], out[i]); // Log
 			if (status_local = vmlGetErrStatus(), status_local) {
@@ -381,13 +389,13 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 			for (int j = 0; j < wlen / 2 + 1; ++j) {
 				if (ptr[j] < DBLIMIT)
 					ptr[j] = DBLIMIT;
-			}
+			}			
 
 			// Free buffers
 			MKL_free(fdata);
 			MKL_free(buff);
 		}		
-	}	
+	}
 
 	if (max_thread == 1)	// All PCs have more than 1 thread if it is 1 there is a problem (Assume as warning)
 		status = DFTI_MULTITHREADED_ERROR;
@@ -571,14 +579,14 @@ ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* 
 
 	status = spectrogram(ptr, dataLen, spectrogramData, window, wlen, overlap, bits);
 	if (status)
-		return status;		
+		return status;
 
 	*alarmData = (double**)MKL_malloc(outLen * sizeof(double*), 64);
 	*alarmLengths = (int*)MKL_malloc(outLen * sizeof(int), 64);
 
 	if (!(alarmData && alarmLengths)) {
-		MKL_free(alarmData);
-		MKL_free(alarmLengths);
+		MKL_free(alarmData); alarmData = NULL;
+		MKL_free(alarmLengths); alarmLengths = NULL;
 		return ippStsMemAllocErr;
 	}
 
