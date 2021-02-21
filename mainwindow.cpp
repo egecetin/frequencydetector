@@ -10,8 +10,7 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot = new QCustomPlot;
 	detectPlot = new QCustomPlot;
 	fftPlot = new QCustomPlot;
-	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
-	
+
 	line = new QFrame;
 	menu = new QFrame;
 	subMenu = new QFrame;
@@ -103,9 +102,6 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot->yAxis->setTickLabelColor(Qt::white);
 	freqPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	freqPlot->axisRect()->setupFullAxesBox(true);
-
-	freqMap->setGradient(QCPColorGradient::gpThermal);
-	freqMap->setDataRange(QCPRange(-150, 0));
 
 	detectPlot->setParent(mainWidget);
 	detectPlot->setOpenGl(true);
@@ -420,13 +416,16 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 		x[idx] = idx;
 	QVector<double> vX(x, &x[audio.data->dataLen]);
 	QVector<double> vY(y, &y[audio.data->dataLen]);
-	timePlot->graph(0)->setData(vX, vY);
+	timePlot->graph(0)->setData(vX, vY, true);
 	timePlot->graph(0)->rescaleAxes();
 	timePlot->replot();
 
 	// Plot spectrogram
-	int nX = floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1;
-	int nY = windowLength / 2 + 1;
+	if (freqMap)
+		delete freqMap;
+	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
+	freqMap->setGradient(QCPColorGradient::gpThermal);
+	freqMap->setDataRange(QCPRange(-150, 0));
 	freqMap->data()->setSize(floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1, windowLength / 2 + 1);
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
@@ -438,6 +437,8 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	}
 	freqMap->rescaleAxes();
 	freqPlot->replot();
+
+	// Plot detections
 
 	enableButtons();
 }

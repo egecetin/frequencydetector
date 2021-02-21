@@ -78,8 +78,7 @@ private:
 	QCustomPlot *freqPlot;
 	QCustomPlot *detectPlot;
 	QCustomPlot *fftPlot;
-
-	QCPColorMap *freqMap;
+	QCPColorMap *freqMap = nullptr;
 
 	QFrame *line;
 	QFrame *menu;
