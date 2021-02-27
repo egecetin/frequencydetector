@@ -121,7 +121,8 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 	// Allocate data
 	fft = (DFTI_DESCRIPTOR_HANDLE*)MKL_malloc(sizeof(DFTI_DESCRIPTOR_HANDLE), 64);
 	createFFT_MKL(fft, wlen);
-	fBuffer = (double**)malloc(desiredSize * sizeof(double*));
+	fBuffer = (double**)malloc((desiredSize) * sizeof(double*));
+	sumBuffer = (double*)MKL_malloc(fBuffLen * sizeof(double), 64);
 	for (int i = 0; i < desiredSize; ++i) {
 		fBuffer[i] = (double*)malloc(fBuffLen * sizeof(double));
 	}
@@ -503,8 +504,8 @@ cleanup:
 	// Deallocation
 	MKL_free(dbuff);
 	MKL_realloc(output, (*n) * sizeof(double)); // Shrink output data
-	if (*n == 0)
-		n = NULL;
+	//if (*n == 0)
+	//	n = NULL;
 
 	return output;
 }
@@ -539,7 +540,7 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 		vdAdd(fBuffLen, sumBuffer, freqBuff, sumBuffer);	// Add to sum
 
 		++currentSize;
-		if (++position - fBuffer > desiredSize)
+		if ((++position - fBuffer) >= desiredSize)
 			position = fBuffer;
 		
 		MKL_free(freqBuff);
@@ -553,12 +554,12 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 		cblas_dcopy(fBuffLen * 2, data, 1, buff, 1);		// Copy data to buffer
 		ippsFIRSR_64f(buff, buff, fBuffLen * 2, pSpec, NULL, NULL, pBuffer);
 		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
-
+		
 		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);	// Subtract old data from sum
 		cblas_dcopy(fBuffLen, freqBuff, 1, *position, 1);	// Overwrite data
 		vdAdd(fBuffLen, sumBuffer, freqBuff, sumBuffer);	// Add to sum
 
-		if (++position - fBuffer > desiredSize)
+		if ((++position - fBuffer) >= desiredSize)
 			position = fBuffer;	
 		
 		MKL_free(freqBuff);
@@ -590,9 +591,10 @@ ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* 
 		return ippStsMemAllocErr;
 	}
 
-	while (pos < shift) {
-		(*alarmData)[k] = estimate_freq(&ptr[pos], window, filterSpec, filterBuffer, (alarmLengths[k]), NULL);
+	while (k < outLen) {
+		(*alarmData)[k] = estimate_freq(&ptr[pos], window, filterSpec, filterBuffer, &((*alarmLengths)[k]), NULL);
 		pos += shift;
+		++k;
 	}
 
 	*outputLength = outLen;

@@ -84,8 +84,7 @@ MainWindow::MainWindow(QWidget *parent)
 	timePlot->yAxis->grid()->setVisible(false);
 	timePlot->addGraph();
 	timePlot->graph(0)->setPen(QPen(navy));
-	timePlot->graph(0)->setBrush(QBrush(navy));
-	timePlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+	timePlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	connect(timePlot->xAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(timePlot->yAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->yAxis2, SLOT(setRange(QCPRange)));
 
@@ -101,7 +100,10 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot->yAxis->setSubTickPen(QPen(silver));
 	freqPlot->yAxis->setTickLabelColor(Qt::white);
 	freqPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
+	connect(freqPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->xAxis2, SLOT(setRange(QCPRange)));
+	connect(freqPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->yAxis2, SLOT(setRange(QCPRange)));
 	freqPlot->axisRect()->setupFullAxesBox(true);
+
 
 	detectPlot->setParent(mainWidget);
 	detectPlot->setOpenGl(true);
@@ -117,6 +119,13 @@ MainWindow::MainWindow(QWidget *parent)
 	detectPlot->yAxis->setSubTickPen(QPen(silver));
 	detectPlot->yAxis->setTickLabelColor(Qt::white);
 	detectPlot->yAxis->grid()->setVisible(false);
+	detectPlot->addGraph();
+	detectPlot->graph(0)->setScatterStyle(QCPScatterStyle::ssCross);
+	detectPlot->graph(0)->setPen(QPen(navy));
+	detectPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
+	detectPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
+	connect(detectPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->xAxis2, SLOT(setRange(QCPRange)));
+	connect(detectPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->yAxis2, SLOT(setRange(QCPRange)));
 
 	mainPlotLayout->addWidget(timePlot);
 	mainPlotLayout->addWidget(freqPlot);
@@ -439,7 +448,21 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	freqPlot->replot();
 
 	// Plot detections
+	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
+	{
+		QVector<double> vX2, vY2;
+		double *ptr = alarmsData[idx];
+		for (size_t jdx = 0; jdx < alarmLengths[idx]; ++jdx)
+		{
+			vY2 << ptr[jdx];
+			vX2 << idx;
+		}
+		detectPlot->graph(0)->addData(vX2, vY2, true);
+	}
+	detectPlot->graph(0)->rescaleAxes();
+	detectPlot->replot();
 
+	free(x);
 	enableButtons();
 }
 
