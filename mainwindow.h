@@ -141,9 +141,11 @@ private:
 	/********* Functions *********/	
 	void selectFile();
 	void updateValues();
-	void enableButtons();
-	void disableButtons();
 
+	Q_INVOKABLE void enableButtons();
+	Q_INVOKABLE void disableButtons();
 	Q_INVOKABLE void updatePlots(bool flag = false);
+	Q_INVOKABLE void updateFFTPlot();
+
 };
 #endif // MAINWINDOW_H

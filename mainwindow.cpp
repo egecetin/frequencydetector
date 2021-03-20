@@ -120,8 +120,8 @@ MainWindow::MainWindow(QWidget *parent)
 	detectPlot->yAxis->setTickLabelColor(Qt::white);
 	detectPlot->yAxis->grid()->setVisible(false);
 	detectPlot->addGraph();
-	detectPlot->graph(0)->setScatterStyle(QCPScatterStyle::ssCross);
-	detectPlot->graph(0)->setPen(QPen(navy));
+	detectPlot->graph(0)->setScatterStyle(QCPScatterStyle::ssStar);
+	detectPlot->graph(0)->setPen(QPen(darkorange));
 	detectPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
 	detectPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	connect(detectPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->xAxis2, SLOT(setRange(QCPRange)));
@@ -378,15 +378,18 @@ void MainWindow::selectFile()
 	
 	// Trigger processes
 	if (fileName.length())
-		QMetaObject::invokeMethod(this, "updatePlots", Qt::ConnectionType::QueuedConnection, Q_ARG(bool, true));
+	{
+		this->disableButtons();
+		updateValues();
+		std::thread th(&MainWindow::updatePlots, this, true);
+		th.detach();
+	}
 
 }
 
 Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 {
 	ERR_STATUS status = 0;
-	disableButtons();
-	//updateValues();
 
 	if (flag) { // If file changed
 		// Dealloc memory
@@ -427,7 +430,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QVector<double> vY(y, &y[audio.data->dataLen]);
 	timePlot->graph(0)->setData(vX, vY, true);
 	timePlot->graph(0)->rescaleAxes();
-	timePlot->replot();
+	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot spectrogram
 	if (freqMap)
@@ -435,6 +438,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
 	freqMap->setGradient(QCPColorGradient::gpThermal);
 	freqMap->setDataRange(QCPRange(-150, 0));
+	freqMap->data()->setRange(QCPRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1), QCPRange(0, windowLength / 2 + 1));
 	freqMap->data()->setSize(floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1, windowLength / 2 + 1);
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
@@ -445,7 +449,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 		}
 	}
 	freqMap->rescaleAxes();
-	freqPlot->replot();
+	QMetaObject::invokeMethod(this->freqPlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot detections
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
@@ -459,18 +463,24 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 		}
 		detectPlot->graph(0)->addData(vX2, vY2, true);
 	}
-	detectPlot->graph(0)->rescaleAxes();
-	detectPlot->replot();
+	detectPlot->xAxis->setRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1);
+	detectPlot->yAxis->setRange(0, windowLength / 2 + 1);
+	QMetaObject::invokeMethod(this->detectPlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	free(x);
-	enableButtons();
+	QMetaObject::invokeMethod(this, "enableButtons", Qt::ConnectionType::QueuedConnection);
+}
+
+Q_INVOKABLE void MainWindow::updateFFTPlot()
+{
+	return void();
 }
 
 void MainWindow::updateValues()
 {
 }
 
-void MainWindow::enableButtons()
+Q_INVOKABLE void MainWindow::enableButtons()
 {
 	selectButton->setEnabled(true);
 	plotButton->setEnabled(true);
@@ -483,7 +493,7 @@ void MainWindow::enableButtons()
 	this->update();
 }
 
-void MainWindow::disableButtons()
+Q_INVOKABLE void MainWindow::disableButtons()
 {
 	selectButton->setEnabled(false);
 	plotButton->setEnabled(false);
