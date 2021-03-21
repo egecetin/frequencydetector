@@ -34,6 +34,7 @@ extern "C" {
 	{
 		int nChannel;
 		int dataLen;
+		int samplingFreq;
 		double **channelData;
 	};	
 	typedef struct StreamData_s StreamData;

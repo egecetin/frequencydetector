@@ -205,7 +205,6 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 
 				// Receive the packet
 				err = receivePackets(ctx, i, data, currPos, frame);
-
 				break;
 			}
 		}
@@ -216,6 +215,7 @@ int readAudioFile(AudioReader *ctx, AudioData *data)
 
 	// Drain contexts
 	for (int i = 0; i < ctx->nStream; ++i) {
+		data->data[i].samplingFreq = ctx->codecContexts[i]->sample_rate;
 		avcodec_send_packet(ctx->codecContexts[i], NULL);
 		if (err)
 			goto cleanup;

@@ -10,6 +10,10 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot = new QCustomPlot;
 	detectPlot = new QCustomPlot;
 	fftPlot = new QCustomPlot;
+	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
+	freqMap->setVisible(false);
+
+	infLine = new QCPItemStraightLine(timePlot);
 
 	line = new QFrame;
 	menu = new QFrame;
@@ -44,6 +48,10 @@ MainWindow::MainWindow(QWidget *parent)
 	radio_stop = new QRadioButton;
 	selectButton = new QPushButton;
 	plotButton = new QPushButton;
+	playButton = new QPushButton;
+	stopButton = new QPushButton;
+	forwardButton = new QPushButton;
+	backwardButton = new QPushButton;
 
 	mainHLayout = new QHBoxLayout;
 	mainPlotLayout = new QVBoxLayout;
@@ -63,10 +71,13 @@ MainWindow::MainWindow(QWidget *parent)
 	alphaBoxLayout = new QHBoxLayout;
 	lowFreqBoxLayout = new QHBoxLayout;
 	highFreqBoxLayout = new QHBoxLayout;
+	playerButtonsBoxLayout = new QHBoxLayout;
 
 	spacer1 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 	spacer2 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 	spacer3 = new QSpacerItem(20, 5, QSizePolicy::Expanding);
+	spacer4 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
+	spacer5 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 
 	// Prepare left side plots
 	timePlot->setParent(mainWidget);
@@ -88,6 +99,10 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(timePlot->xAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(timePlot->yAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->yAxis2, SLOT(setRange(QCPRange)));
 
+	infLine->point1->setCoords(0, 0);
+	infLine->point2->setCoords(0, 1);
+	infLine->setPen(QPen(crimson));
+
 	freqPlot->setParent(mainWidget);
 	freqPlot->setOpenGl(true);
 	freqPlot->setBackground(QBrush(dark, Qt::SolidPattern));
@@ -103,7 +118,6 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(freqPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(freqPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->yAxis2, SLOT(setRange(QCPRange)));
 	freqPlot->axisRect()->setupFullAxesBox(true);
-
 
 	detectPlot->setParent(mainWidget);
 	detectPlot->setOpenGl(true);
@@ -264,6 +278,31 @@ MainWindow::MainWindow(QWidget *parent)
 	filterGroupLayout->addWidget(radioMenu, 2);
 	filterGroupLayout->addLayout(cutFreqLayout, 8);
 
+	backwardButton->setParent(menu);
+	backwardButton->setFixedSize((backwardButton->iconSize() += backwardButton->iconSize() / 2));
+	backwardButton->setIcon(style()->standardIcon(QStyle::SP_MediaSeekBackward));
+
+	playButton->setParent(menu);
+	playButton->setCheckable(true);
+	playButton->setFixedSize((playButton->iconSize() += playButton->iconSize() / 2));
+	playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+
+	stopButton->setParent(menu);
+	stopButton->setFixedSize((stopButton->iconSize() += stopButton->iconSize() / 2));
+	stopButton->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+
+	forwardButton->setParent(menu);
+	forwardButton->setFixedSize((forwardButton->iconSize() += forwardButton->iconSize() / 2));
+	forwardButton->setIcon(style()->standardIcon(QStyle::SP_MediaSeekForward));
+
+	playerButtonsBoxLayout->addSpacerItem(spacer4);
+	playerButtonsBoxLayout->addWidget(backwardButton);
+	playerButtonsBoxLayout->addWidget(playButton);
+	playerButtonsBoxLayout->addWidget(stopButton);
+	playerButtonsBoxLayout->addWidget(forwardButton);
+	playerButtonsBoxLayout->addSpacerItem(spacer5);
+	playerButtonsBoxLayout->setSpacing(0);
+
 	subMenuLayout->addSpacerItem(spacer3);
 	subMenuLayout->addWidget(path);
 	subMenuLayout->addLayout(selectButtonLayout);
@@ -275,6 +314,7 @@ MainWindow::MainWindow(QWidget *parent)
 	subMenuLayout->addLayout(infBoxLayout);
 	subMenuLayout->addLayout(alphaBoxLayout);
 	subMenuLayout->addLayout(filterGroupLayout);
+	subMenuLayout->addLayout(playerButtonsBoxLayout);
 	subMenu->setParent(mainWidget);
 	subMenu->setFrameShape(QFrame::NoFrame);
 	subMenu->setLayout(subMenuLayout);
@@ -300,6 +340,10 @@ MainWindow::MainWindow(QWidget *parent)
 	// Connect functions
 	connect(selectButton, &QPushButton::pressed, this, &MainWindow::selectFile);
 	connect(plotButton, &QPushButton::pressed, this, [this]{ this->updatePlots(false); }, Qt::ConnectionType::QueuedConnection);
+	connect(playButton, &QPushButton::pressed, this, &MainWindow::playMedia);
+	connect(stopButton, &QPushButton::pressed, this, &MainWindow::stopMedia);
+	connect(backwardButton, &QPushButton::pressed, this, &MainWindow::backwardMedia);
+	connect(forwardButton, &QPushButton::pressed, this, &MainWindow::forwardMedia);
 
 	// Init processing
 	double rFreq = 200.0 / 2048;
@@ -384,7 +428,6 @@ void MainWindow::selectFile()
 		std::thread th(&MainWindow::updatePlots, this, true);
 		th.detach();
 	}
-
 }
 
 Q_INVOKABLE void MainWindow::updatePlots(bool flag)
@@ -421,6 +464,8 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 
 	status = processFile(&audio, streamIdx, channelIdx, windowFunctions[winIdx], windowLength, overlap, bits, &spectrogramData, &alarmsData, &alarmLengths, &outputLength);
 
+	double timeLimit = audio.data->dataLen / audio.data->samplingFreq;
+	
 	// Plot time data
 	double *x = (double*)malloc(audio.data->dataLen * sizeof(double));
 	double *y = audio.data->channelData[channelIdx];
@@ -433,9 +478,8 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot spectrogram
-	if (freqMap)
-		delete freqMap;
-	freqMap = new QCPColorMap(freqPlot->xAxis, freqPlot->yAxis);
+	freqMap->setVisible(true);
+	freqMap->data()->clear();
 	freqMap->setGradient(QCPColorGradient::gpThermal);
 	freqMap->setDataRange(QCPRange(-150, 0));
 	freqMap->data()->setRange(QCPRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1), QCPRange(0, windowLength / 2 + 1));
@@ -452,6 +496,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QMetaObject::invokeMethod(this->freqPlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot detections
+	detectPlot->graph(0)->data()->clear();
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
 		QVector<double> vX2, vY2;
@@ -477,6 +522,73 @@ Q_INVOKABLE void MainWindow::updateFFTPlot()
 }
 
 void MainWindow::updateValues()
+{
+}
+
+void MainWindow::playMedia()
+{
+	if (!this->playButton->isChecked())
+	{
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+		playButton->update();
+
+		float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
+
+		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
+		size_t ind2 = cblas_idamin(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
+
+		double max_val;
+		if(audio.data->channelData[channelIdx][ind1] > abs(audio.data->channelData[channelIdx][ind2]))
+			max_val = audio.data->channelData[channelIdx][ind1];
+		else
+			max_val = abs(audio.data->channelData[channelIdx][ind2]);
+
+		for (size_t jdx = 0; jdx < audio.data->dataLen; ++jdx)
+			arrBuff[jdx] = audio.data->channelData[channelIdx][jdx] / max_val;
+		QByteArray *bArr = new QByteArray((char*)arrBuff, audio.data->dataLen * sizeof(float));
+		QBuffer *buff = new QBuffer(bArr);
+		free(arrBuff);
+		buff->open(QBuffer::ReadOnly);
+
+		QAudioFormat format;
+		format.setSampleRate(audio.data->samplingFreq);
+		format.setChannelCount(1);
+		format.setSampleSize(32);
+		format.setCodec("audio/pcm");
+		format.setByteOrder(QAudioFormat::LittleEndian);
+		format.setSampleType(QAudioFormat::SampleType::Float);
+
+		if (audioDev)
+			delete audioDev;
+
+		QAudioDeviceInfo deviceInfo(QAudioDeviceInfo::defaultOutputDevice());
+		if(!deviceInfo.isFormatSupported(format))
+			format = deviceInfo.nearestFormat(format);
+		audioDev = new QAudioOutput(deviceInfo, format);
+		if (audioDev->error() != QAudio::NoError)
+			return;
+
+		audioDev->setVolume(0.5);
+		audioDev->start(buff);
+	}
+	else
+	{
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+		playButton->update();
+
+		audioDev->suspend();
+	}
+}
+
+void MainWindow::stopMedia()
+{
+}
+
+void MainWindow::backwardMedia()
+{
+}
+
+void MainWindow::forwardMedia()
 {
 }
 

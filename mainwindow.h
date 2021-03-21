@@ -1,6 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QDebug>
+
 #include "audioreader.h"
 #include "process.h"
 #include "QCustomPlot/qcustomplot.h"
@@ -9,9 +11,11 @@
 
 #include <qbuttongroup.h>
 #include <qlayoutitem.h>
+#include <qaudiooutput.h>
 #include <qboxlayout.h>
 #include <qspinbox.h>
 #include <qwidget.h>
+#include <qstyle.h>
 #include <qlabel.h>
 #include <qframe.h>
 
@@ -34,7 +38,7 @@
 #define mistyrose QColor(255, 228, 225)
 #define rosybrown QColor(188, 143, 143)
 
-static QColor plotColors[] = {	navy, crimson, darkorange, goldenrot, lime, wheat, aquamarine, 
+static QColor plotColors[] = {	navy, darkorange, goldenrot, lime, wheat, aquamarine, 
 								darkviolet, peachpuff, deepskyblue, mistyrose, rosybrown	};
 static int plotColorsLen = sizeof(plotColors) / sizeof(QColor);
 
@@ -74,11 +78,15 @@ private:
 	/********** Objects **********/
 	QWidget *mainWidget;
 
+	QAudioOutput *audioDev = nullptr; 
+
 	QCustomPlot *timePlot;
 	QCustomPlot *freqPlot;
 	QCustomPlot *detectPlot;
 	QCustomPlot *fftPlot;
-	QCPColorMap *freqMap = nullptr;
+	QCPColorMap *freqMap;
+
+	QCPItemStraightLine *infLine;
 
 	QFrame *line;
 	QFrame *menu;
@@ -113,11 +121,17 @@ private:
 	QRadioButton *radio_stop;
 	QPushButton *selectButton;
 	QPushButton *plotButton;
+	QPushButton *playButton;
+	QPushButton *stopButton;
+	QPushButton *forwardButton;
+	QPushButton *backwardButton;
 
 	/********** Layouts **********/
 	QSpacerItem *spacer1;
 	QSpacerItem *spacer2;
 	QSpacerItem *spacer3;
+	QSpacerItem *spacer4;
+	QSpacerItem *spacer5;
 
 	QHBoxLayout *mainHLayout;
 	QVBoxLayout *mainPlotLayout;
@@ -137,10 +151,15 @@ private:
 	QHBoxLayout *alphaBoxLayout;
 	QHBoxLayout *lowFreqBoxLayout;
 	QHBoxLayout *highFreqBoxLayout;
+	QHBoxLayout *playerButtonsBoxLayout;
 
 	/********* Functions *********/	
 	void selectFile();
 	void updateValues();
+	void playMedia();
+	void stopMedia();
+	void backwardMedia();
+	void forwardMedia();
 
 	Q_INVOKABLE void enableButtons();
 	Q_INVOKABLE void disableButtons();
