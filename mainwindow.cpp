@@ -236,9 +236,13 @@ MainWindow::MainWindow(QWidget *parent)
 
 	radioGroup->setParent(radioMenu);
 	radio_high->setParent(radioMenu);
+	radioGroup->addButton(radio_high, 0);
 	radio_low->setParent(radioMenu);
+	radioGroup->addButton(radio_low, 1);
 	radio_pass->setParent(radioMenu);
+	radioGroup->addButton(radio_pass, 2);
 	radio_stop->setParent(radioMenu);
+	radioGroup->addButton(radio_stop, 3);
 
 	radioMenu->setParent(menu);
 	radioMenu->setLineWidth(2);
@@ -395,6 +399,7 @@ void MainWindow::retranslateUi()
 	infBox->setValue(0.5);
 	alphaBox->setValue(3.5);
 	radio_high->setChecked(true);
+	lowFreqBox->setEnabled(true);
 	lowFreqBox->setValue(200.0 / 2048);
 	highFreqBox->setValue(0.98);
 	highFreqBox->setEnabled(false);
@@ -605,7 +610,7 @@ void MainWindow::playMedia()
 		{
 			QMessageBox::critical(this, tr("Error"), tr("Cant access the audio device!"));
 		}
-		audioDev->setVolume(0.5);
+		audioDev->setVolume(0.75);
 		audioDev->setNotifyInterval(100);
 		connect(audioDev, &QAudioOutput::notify, this, &MainWindow::playerSlider, Qt::ConnectionType::QueuedConnection);
 		connect(audioDev, &QAudioOutput::stateChanged, this, &MainWindow::playerStateChanged, Qt::ConnectionType::QueuedConnection);
@@ -613,14 +618,10 @@ void MainWindow::playMedia()
 		// Prepare data
 		double max_val = 0;
 		float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
-		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
-		size_t ind2 = cblas_idamin(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
 
 		// Find absolute max
-		if (audio.data->channelData[channelIdx][ind1] > abs(audio.data->channelData[channelIdx][ind2]))
-			max_val = audio.data->channelData[channelIdx][ind1];
-		else
-			max_val = abs(audio.data->channelData[channelIdx][ind2]);
+		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
+		max_val = abs(audio.data->channelData[channelIdx][ind1]);
 
 		// Change precision and scale
 		ippsConvert_64f32f(audio.data->channelData[channelIdx], arrBuff, audio.data->dataLen);
@@ -704,6 +705,37 @@ void MainWindow::playerStateChanged(QAudio::State state)
 
 Q_INVOKABLE void MainWindow::enableButtons()
 {
+	backwardButton->setEnabled(true);
+	playButton->setEnabled(true);
+	stopButton->setEnabled(true);
+	forwardButton ->setEnabled(true);
+
+	nwinBox->setEnabled(true);
+	winTypeBox->setEnabled(true);
+	wlenBox->setEnabled(true);
+	overlapBox->setEnabled(true);
+	infBox->setEnabled(true);
+	alphaBox->setEnabled(true);
+
+	switch (radioGroup->checkedId())
+	{
+	case 0:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(false);
+		break;
+	case 1:
+		lowFreqBox->setEnabled(false);
+		highFreqBox->setEnabled(true);
+		break;
+	case 2:
+	case 3:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(true);
+		break;
+	default:
+		break;
+	}
+
 	selectButton->setEnabled(true);
 	plotButton->setEnabled(true);
 	
@@ -717,6 +749,20 @@ Q_INVOKABLE void MainWindow::enableButtons()
 
 Q_INVOKABLE void MainWindow::disableButtons()
 {
+	backwardButton->setEnabled(false);
+	playButton->setEnabled(false);
+	stopButton->setEnabled(false);
+	forwardButton->setEnabled(false);
+
+	nwinBox->setEnabled(false);
+	winTypeBox->setEnabled(false);
+	wlenBox->setEnabled(false);
+	overlapBox->setEnabled(false);
+	infBox->setEnabled(false);
+	alphaBox->setEnabled(false);
+	lowFreqBox->setEnabled(false);
+	highFreqBox->setEnabled(false);
+
 	selectButton->setEnabled(false);
 	plotButton->setEnabled(false);
 
