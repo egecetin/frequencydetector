@@ -14,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
 	freqMap->setVisible(false);
 
 	infLine = new QCPItemStraightLine(timePlot);
+	infLine->setLayer(timePlot->layer("axes"));
 
 	line = new QFrame;
 	menu = new QFrame;
@@ -283,7 +284,6 @@ MainWindow::MainWindow(QWidget *parent)
 	backwardButton->setIcon(style()->standardIcon(QStyle::SP_MediaSeekBackward));
 
 	playButton->setParent(menu);
-	playButton->setCheckable(true);
 	playButton->setFixedSize((playButton->iconSize() += playButton->iconSize() / 2));
 	playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
 
@@ -511,6 +511,13 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	detectPlot->xAxis->setRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1);
 	detectPlot->yAxis->setRange(0, windowLength / 2 + 1);
 	QMetaObject::invokeMethod(this->detectPlot, "replot", Qt::ConnectionType::QueuedConnection);
+	
+	if (audioDev)
+	{
+		delete audioDev;
+		audioDev = nullptr;
+	}
+	audioDev = new QAudioOutput;
 
 	free(x);
 	QMetaObject::invokeMethod(this, "enableButtons", Qt::ConnectionType::QueuedConnection);
@@ -527,29 +534,25 @@ void MainWindow::updateValues()
 
 void MainWindow::playMedia()
 {
-	if (!this->playButton->isChecked())
+	switch (audioDev->state())
 	{
-		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+	case QAudio::State::ActiveState:
+	{
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+		audioDev->suspend();
+
 		playButton->update();
-
-		float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
-
-		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
-		size_t ind2 = cblas_idamin(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
-
-		double max_val;
-		if(audio.data->channelData[channelIdx][ind1] > abs(audio.data->channelData[channelIdx][ind2]))
-			max_val = audio.data->channelData[channelIdx][ind1];
-		else
-			max_val = abs(audio.data->channelData[channelIdx][ind2]);
-
-		for (size_t jdx = 0; jdx < audio.data->dataLen; ++jdx)
-			arrBuff[jdx] = audio.data->channelData[channelIdx][jdx] / max_val;
-		QByteArray *bArr = new QByteArray((char*)arrBuff, audio.data->dataLen * sizeof(float));
-		QBuffer *buff = new QBuffer(bArr);
-		free(arrBuff);
-		buff->open(QBuffer::ReadOnly);
-
+		break;
+	}
+	case QAudio::State::SuspendedState:
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+		audioDev->resume();
+		playButton->update();
+		break;
+	case QAudio::State::StoppedState:
+	case QAudio::State::IdleState:
+	{
+		// Prepare audio output device
 		QAudioFormat format;
 		format.setSampleRate(audio.data->samplingFreq);
 		format.setChannelCount(1);
@@ -559,37 +562,125 @@ void MainWindow::playMedia()
 		format.setSampleType(QAudioFormat::SampleType::Float);
 
 		if (audioDev)
+		{
 			delete audioDev;
+			audioDev = nullptr;
+		}
+		if (audioBuff)
+		{
+			delete audioBuff;
+			audioBuff = nullptr;
+		}
+
+		audioBuff = new QBuffer;
 
 		QAudioDeviceInfo deviceInfo(QAudioDeviceInfo::defaultOutputDevice());
-		if(!deviceInfo.isFormatSupported(format))
+		if (!deviceInfo.isFormatSupported(format))
+		{
+			QMessageBox::warning(this, tr("Warning"), tr("Format is not supported. Trying with nearest format!"));
 			format = deviceInfo.nearestFormat(format);
+		}
+
 		audioDev = new QAudioOutput(deviceInfo, format);
 		if (audioDev->error() != QAudio::NoError)
-			return;
-
+		{
+			QMessageBox::critical(this, tr("Error"), tr("Cant access the audio device!"));
+		}
 		audioDev->setVolume(0.5);
-		audioDev->start(buff);
-	}
-	else
-	{
-		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-		playButton->update();
+		audioDev->setNotifyInterval(100);
+		connect(audioDev, &QAudioOutput::notify, this, &MainWindow::playerSlider, Qt::ConnectionType::QueuedConnection);
+		connect(audioDev, &QAudioOutput::stateChanged, this, &MainWindow::playerStateChanged, Qt::ConnectionType::QueuedConnection);
+		
+		// Prepare data
+		double max_val = 0;
+		float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
+		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
+		size_t ind2 = cblas_idamin(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
 
-		audioDev->suspend();
+		// Find absolute max
+		if (audio.data->channelData[channelIdx][ind1] > abs(audio.data->channelData[channelIdx][ind2]))
+			max_val = audio.data->channelData[channelIdx][ind1];
+		else
+			max_val = abs(audio.data->channelData[channelIdx][ind2]);
+
+		// Change precision and scale
+		ippsConvert_64f32f(audio.data->channelData[channelIdx], arrBuff, audio.data->dataLen);
+		cblas_sscal(audio.data->dataLen, 1.0 / max_val, arrBuff, 1);
+
+		// Set buffer
+		QByteArray bArr = QByteArray((char*)arrBuff, audio.data->dataLen * sizeof(float));
+		audioBuff->setData(bArr);
+		audioBuff->open(QBuffer::ReadOnly);
+
+		free(arrBuff);
+
+		// Start audio and update gui
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+		audioDev->start(audioBuff);
+		playButton->update();
+		break;
+	}
+	case QAudio::State::InterruptedState:
+		QMessageBox::warning(this, tr("Warning"), tr("Another process has control of device!"));
+		break;	
+	default:
+		QMessageBox::critical(this, tr("Error"), tr("Unknown audio device state!"));
+		break;
 	}
 }
 
 void MainWindow::stopMedia()
 {
+	playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+	audioDev->stop();
+	playButton->update();
 }
 
 void MainWindow::backwardMedia()
 {
+	int64_t pos = audioBuff->pos() - this->audio.data->samplingFreq * 5 * sizeof(float);
+	if (pos < 0)
+		audioBuff->seek(0);
+	else
+		audioBuff->seek(pos);
 }
 
 void MainWindow::forwardMedia()
 {
+	int64_t pos = audioBuff->pos() + this->audio.data->samplingFreq * 5 * sizeof(float);
+	if (pos > audioBuff->size())
+		audioBuff->seek(audioBuff->size());
+	else
+		audioBuff->seek(pos);
+}
+
+void MainWindow::playerSlider()
+{
+	infLine->point1->setCoords(audioBuff->pos() / sizeof(float), 0);
+	infLine->point2->setCoords(audioBuff->pos() / sizeof(float), 1);
+	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
+}
+
+void MainWindow::playerStateChanged(QAudio::State state)
+{
+	switch (state)
+	{
+	case QAudio::ActiveState:
+		break;
+	case QAudio::SuspendedState:
+		break;
+	case QAudio::StoppedState:
+		break;
+	case QAudio::IdleState:
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+		audioDev->stop();
+		playButton->update();
+		break;
+	case QAudio::InterruptedState:
+		break;
+	default:
+		break;
+	}
 }
 
 Q_INVOKABLE void MainWindow::enableButtons()

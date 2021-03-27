@@ -78,7 +78,8 @@ private:
 	/********** Objects **********/
 	QWidget *mainWidget;
 
-	QAudioOutput *audioDev = nullptr; 
+	QBuffer *audioBuff = nullptr;
+	QAudioOutput *audioDev = nullptr;
 
 	QCustomPlot *timePlot;
 	QCustomPlot *freqPlot;
@@ -156,10 +157,13 @@ private:
 	/********* Functions *********/	
 	void selectFile();
 	void updateValues();
+
 	void playMedia();
 	void stopMedia();
 	void backwardMedia();
 	void forwardMedia();
+	void playerSlider();
+	void playerStateChanged(QAudio::State state);
 
 	Q_INVOKABLE void enableButtons();
 	Q_INVOKABLE void disableButtons();
