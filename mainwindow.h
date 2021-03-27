@@ -9,7 +9,6 @@
 
 #include <QMainWindow>
 
-#include <qgraphicseffect.h>
 #include <qprogressdialog.h>
 #include <qbuttongroup.h>
 #include <qlayoutitem.h>
@@ -17,6 +16,7 @@
 #include <qboxlayout.h>
 #include <qspinbox.h>
 #include <qwidget.h>
+#include <qglobal.h>
 #include <qstyle.h>
 #include <qlabel.h>
 #include <qframe.h>
@@ -70,12 +70,16 @@ private:
 	double** spectrogramData = NULL;
 	double** alarmsData = NULL;
 	int* alarmLengths = NULL;
-	int outputLength;
+	int outputLength = 0;
 	int streamIdx = 0;
 	int channelIdx = 0;
 	int winIdx = 15;
 	int windowLength = 4096;
 	int overlap = 2048;
+	QCPRange timeXAxes = QCPRange(0, 5);
+	QCPRange timeYAxes = QCPRange(0, 5);
+	QCPRange freqXAxes = QCPRange(0, 5);
+	QCPRange freqYAxes = QCPRange(0, 5);
 
 	/********** Objects **********/
 	QWidget *mainWidget;
@@ -165,8 +169,11 @@ private:
 	void stopMedia();
 	void backwardMedia();
 	void forwardMedia();
+
 	void playerSlider();
 	void playerStateChanged(QAudio::State state);
+
+	void limitRange(QCustomPlot *plot, QCPRange *X, QCPRange *Y);
 
 	Q_INVOKABLE void enableButtons();
 	Q_INVOKABLE void disableButtons();

@@ -99,6 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
 	timePlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	connect(timePlot->xAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(timePlot->yAxis, SIGNAL(rangeChanged(QCPRange)), timePlot->yAxis2, SLOT(setRange(QCPRange)));
+	//connect(timePlot, &QCustomPlot::beforeReplot, this, [this] { this->limitRange(timePlot, &timeXAxes, &timeYAxes); } );
 
 	infLine->point1->setCoords(0, 0);
 	infLine->point2->setCoords(0, 1);
@@ -118,6 +119,7 @@ MainWindow::MainWindow(QWidget *parent)
 	freqPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	connect(freqPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(freqPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), freqPlot->yAxis2, SLOT(setRange(QCPRange)));
+	//connect(freqPlot, &QCustomPlot::beforeReplot, this, [this] { this->limitRange(freqPlot, &freqXAxes, &freqYAxes); });
 	freqPlot->axisRect()->setupFullAxesBox(true);
 
 	detectPlot->setParent(mainWidget);
@@ -141,6 +143,8 @@ MainWindow::MainWindow(QWidget *parent)
 	detectPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom);
 	connect(detectPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(detectPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->yAxis2, SLOT(setRange(QCPRange)));
+	//connect(detectPlot, &QCustomPlot::beforeReplot, this, [this] { this->limitRange(detectPlot, &freqXAxes, &freqYAxes); });
+
 
 	mainPlotLayout->addWidget(timePlot);
 	mainPlotLayout->addWidget(freqPlot);
@@ -462,6 +466,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	}
 
 	if (spectrogramData) { // Clear previous data
+#pragma omp simd
 		for (int i = 0; i < outputLength; ++i) {
 			MKL_free(spectrogramData[i]);
 			MKL_free(alarmsData[i]);
@@ -490,12 +495,18 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 75));
 	double *x = (double*)malloc(audio.data->dataLen * sizeof(double));
 	double *y = audio.data->channelData[channelIdx];
+#pragma omp simd
 	for (size_t idx = 0; idx < audio.data->dataLen; ++idx)
 		x[idx] = idx;
 	QVector<double> vX(x, &x[audio.data->dataLen]);
 	QVector<double> vY(y, &y[audio.data->dataLen]);
 	timePlot->graph(0)->setData(vX, vY, true);
 	timePlot->graph(0)->rescaleAxes();
+
+	size_t m_idx = cblas_idamax(audio.data->dataLen, y, 1);
+	timeXAxes = QCPRange(0, audio.data->dataLen);
+	timeYAxes = QCPRange(-y[m_idx], y[m_idx]);
+
 	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot spectrogram
@@ -509,12 +520,15 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
 		double *ptr = spectrogramData[idx];
+#pragma omp simd
 		for (size_t jdx = 0; jdx < windowLength / 2 + 1; ++jdx)
 		{
 			freqMap->data()->setCell(idx, jdx, ptr[jdx]);
 		}
 	}
 	freqMap->rescaleAxes();
+	freqXAxes = QCPRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1);
+	freqYAxes = QCPRange(0, windowLength / 2 + 1);
 	QMetaObject::invokeMethod(this->freqPlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot detections
@@ -701,6 +715,18 @@ void MainWindow::playerStateChanged(QAudio::State state)
 	default:
 		break;
 	}
+}
+
+void MainWindow::limitRange(QCustomPlot *plot, QCPRange *X, QCPRange *Y)
+{
+	if (plot->xAxis->range().lower < X->lower)
+		plot->xAxis->setRangeLower(X->lower);
+	if (plot->xAxis->range().upper > X->upper)
+		plot->xAxis->setRangeUpper(X->upper);
+	if (plot->yAxis->range().lower < Y->lower)
+		plot->yAxis->setRangeLower(Y->lower);
+	if (plot->yAxis->range().upper > Y->upper)
+		plot->yAxis->setRangeUpper(Y->upper);
 }
 
 Q_INVOKABLE void MainWindow::enableButtons()
