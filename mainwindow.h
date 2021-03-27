@@ -9,6 +9,8 @@
 
 #include <QMainWindow>
 
+#include <qgraphicseffect.h>
+#include <qprogressdialog.h>
 #include <qbuttongroup.h>
 #include <qlayoutitem.h>
 #include <qaudiooutput.h>
@@ -77,6 +79,7 @@ private:
 
 	/********** Objects **********/
 	QWidget *mainWidget;
+	QProgressDialog *dialog = nullptr;
 
 	QBuffer *audioBuff = nullptr;
 	QAudioOutput *audioDev = nullptr;

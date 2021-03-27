@@ -79,7 +79,7 @@ MainWindow::MainWindow(QWidget *parent)
 	spacer3 = new QSpacerItem(20, 5, QSizePolicy::Expanding);
 	spacer4 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 	spacer5 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
-
+	
 	// Prepare left side plots
 	timePlot->setParent(mainWidget);
 	timePlot->setOpenGl(true);
@@ -424,7 +424,16 @@ void MainWindow::selectFile()
 	if (fileName.length())
 	{
 		this->disableButtons();
-		updateValues();
+		this->updateValues();
+		dialog = new QProgressDialog("Processing request...", "", 0, 100, this);
+		dialog->setWindowModality(Qt::WindowModality::WindowModal);
+		dialog->setCancelButton(nullptr);
+		dialog->setWindowFlags(dialog->windowFlags() | Qt::FramelessWindowHint | Qt::WindowTitleHint);
+		
+		dialog->setValue(5);
+		dialog->setVisible(true);
+		dialog->update();
+
 		std::thread th(&MainWindow::updatePlots, this, true);
 		th.detach();
 	}
@@ -435,6 +444,9 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	ERR_STATUS status = 0;
 
 	if (flag) { // If file changed
+		QMetaObject::invokeMethod(this->dialog, "setLabelText", Qt::QueuedConnection, Q_ARG(QString, "Reading file..."));
+		QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 10));
+
 		// Dealloc memory
 		deinitAudioReaderStruct(&reader);
 		deallocAudioData(&audio);
@@ -462,11 +474,15 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	else // Should not be reached
 		bits = 16;
 
+	QMetaObject::invokeMethod(this->dialog, "setLabelText", Qt::QueuedConnection, Q_ARG(QString, "Processing data..."));
+	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 35));
 	status = processFile(&audio, streamIdx, channelIdx, windowFunctions[winIdx], windowLength, overlap, bits, &spectrogramData, &alarmsData, &alarmLengths, &outputLength);
 
-	double timeLimit = audio.data->dataLen / audio.data->samplingFreq;
-	
+	double timeLimit = audio.data->dataLen / audio.data->samplingFreq;	
+
 	// Plot time data
+	QMetaObject::invokeMethod(this->dialog, "setLabelText", Qt::QueuedConnection, Q_ARG(QString, "Plotting..."));
+	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 75));
 	double *x = (double*)malloc(audio.data->dataLen * sizeof(double));
 	double *y = audio.data->channelData[channelIdx];
 	for (size_t idx = 0; idx < audio.data->dataLen; ++idx)
@@ -478,6 +494,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot spectrogram
+	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 85));
 	freqMap->setVisible(true);
 	freqMap->data()->clear();
 	freqMap->setGradient(QCPColorGradient::gpThermal);
@@ -496,6 +513,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	QMetaObject::invokeMethod(this->freqPlot, "replot", Qt::ConnectionType::QueuedConnection);
 
 	// Plot detections
+	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 95));
 	detectPlot->graph(0)->data()->clear();
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
@@ -519,8 +537,9 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	}
 	audioDev = new QAudioOutput;
 
-	free(x);
+	QMetaObject::invokeMethod(this->dialog, "setValue", Qt::QueuedConnection, Q_ARG(int, 100));
 	QMetaObject::invokeMethod(this, "enableButtons", Qt::ConnectionType::QueuedConnection);
+	free(x);
 }
 
 Q_INVOKABLE void MainWindow::updateFFTPlot()
