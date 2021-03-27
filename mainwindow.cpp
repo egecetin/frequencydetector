@@ -169,6 +169,12 @@ MainWindow::MainWindow(QWidget *parent)
 	fftPlot->yAxis->grid()->setSubGridVisible(true);
 	fftPlot->yAxis->grid()->setPen(QPen(silver, 1, Qt::DotLine));
 	fftPlot->yAxis->grid()->setSubGridPen(QPen(dimgray, 1, Qt::DotLine));	
+	fftPlot->addGraph();
+	fftPlot->graph(0)->setPen(QPen(aquamarine));
+	fftPlot->addGraph();
+	fftPlot->graph(1)->setPen(QPen(darkorange));
+	fftPlot->addGraph();
+	fftPlot->graph(2)->setPen(QPen(lime));
 
 	line->setLineWidth(2);
 	line->setFrameShadow(QFrame::Sunken);
@@ -549,6 +555,9 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	detectPlot->yAxis->setRange(0, windowLength / 2 + 1);
 	QMetaObject::invokeMethod(this->detectPlot, "replot", Qt::ConnectionType::QueuedConnection);
 	
+
+	this->updateFFTPlot(0);
+
 	if (audioDev)
 	{
 		delete audioDev;
@@ -561,9 +570,36 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	free(x);
 }
 
-Q_INVOKABLE void MainWindow::updateFFTPlot()
-{
-	return void();
+Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
+{	
+	int n = 0;
+	double *values = (double*)MKL_calloc(fBuffLen, sizeof(double), 64);
+	double *th_values = (double*)MKL_calloc(fBuffLen, sizeof(double), 64);
+	int64_t startPos = int64_t(pos / (windowLength - overlap) - nwin) * (windowLength - overlap);
+	if (startPos < 0)
+		startPos = 0;
+
+	double *out = estimate_freq_local(&(audio.data->channelData[channelIdx][startPos]), windowFunctions[winIdx], &n, windowLength - overlap, values, th_values);
+
+	// Set all values
+	double *x = (double*)malloc(sizeof(double) * fBuffLen);
+#pragma omp simd
+	for (size_t idx = 0; idx < fBuffLen; ++idx)
+		x[idx] = idx;
+	QVector<double> vX(x, &x[fBuffLen]);
+	QVector<double> vY(values, &values[fBuffLen]);
+	fftPlot->graph(0)->setData(vX, vY, true);
+
+	// Set threshold values
+	vY = QVector<double>(th_values, &th_values[fBuffLen]);
+	fftPlot->graph(1)->setData(vX, vY, true);
+
+	// Mark estimated values
+	//fftPlot->graph(2)->setData();
+	
+	fftPlot->rescaleAxes();
+	QMetaObject::invokeMethod(this->fftPlot, "replot", Qt::ConnectionType::QueuedConnection);
+
 }
 
 void MainWindow::updateValues()

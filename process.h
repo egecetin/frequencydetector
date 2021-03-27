@@ -47,6 +47,7 @@ extern "C" {
 	double* calculateFFT_MKL(double *data, double *window, int dataLen, DFTI_DESCRIPTOR_HANDLE *fft);
 	double* thresholding(double *data, int dataLen, int lag, double threshold, double influence, int *n, double *th_values);
 	double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8u *pBuffer, int *size, double *th_values);
+	double* estimate_freq_local(double *data, double *window, int *size, int shift, double *values, double *th_values);
 	ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* window, int wlen, int overlap, int bits, double ***spectrogramData, double ***alarmData, int **alarmLengths, int *outputLength);
 	
 	// Helper

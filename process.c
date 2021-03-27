@@ -122,7 +122,7 @@ void init_globalvar(int wlen, int nwin, int lag, double thresh_alpha, double thr
 	fft = (DFTI_DESCRIPTOR_HANDLE*)MKL_malloc(sizeof(DFTI_DESCRIPTOR_HANDLE), 64);
 	createFFT_MKL(fft, wlen);
 	fBuffer = (double**)malloc((desiredSize) * sizeof(double*));
-	sumBuffer = (double*)MKL_malloc(fBuffLen * sizeof(double), 64);
+	sumBuffer = (double*)MKL_calloc(fBuffLen, sizeof(double), 64);
 	for (int i = 0; i < desiredSize; ++i) {
 		fBuffer[i] = (double*)malloc(fBuffLen * sizeof(double));
 	}
@@ -326,7 +326,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 	}
 
 	// Compute FFT
-	//#pragma omp parallel for
+	#pragma omp parallel for
 	for (int i = 0; i < outLen; ++i) {
 		if (!status) {
 			ERR_STATUS status_local = DFTI_NO_ERROR;
@@ -566,6 +566,31 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 		MKL_free(buff);
 		return out;
 	}
+}
+
+
+double* estimate_freq_local(double *data, double *window, int *size, int shift, double *values, double *th_values)
+{
+	int64_t pos = 0;
+	double *freqBuff;
+	double *buff = (double*)MKL_malloc(fBuffLen * 2 * sizeof(double), 64);
+	if (!buff)
+		return NULL;
+
+	for (size_t idx = 0; idx < desiredSize; ++idx)
+	{
+		cblas_dcopy(fBuffLen * 2, &data[pos], 1, buff, 1);		// Copy data to buffer
+		ippsFIRSR_64f(buff, buff, fBuffLen * 2, filterSpec, NULL, NULL, filterBuffer);
+		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
+		vdAdd(fBuffLen, values, freqBuff, values);				// Add to sum
+		MKL_free(freqBuff);
+		pos += shift;
+	}
+
+	double *out = thresholding(values, fBuffLen, lagLen, threshold_alpha, thresh_influence, size, th_values);
+
+	MKL_free(buff);
+	return out;
 }
 
 ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* window, int wlen, int overlap,

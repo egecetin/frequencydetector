@@ -76,6 +76,7 @@ private:
 	int winIdx = 15;
 	int windowLength = 4096;
 	int overlap = 2048;
+	int nwin = 8;
 	QCPRange timeXAxes = QCPRange(0, 5);
 	QCPRange timeYAxes = QCPRange(0, 5);
 	QCPRange freqXAxes = QCPRange(0, 5);
@@ -178,7 +179,7 @@ private:
 	Q_INVOKABLE void enableButtons();
 	Q_INVOKABLE void disableButtons();
 	Q_INVOKABLE void updatePlots(bool flag = false);
-	Q_INVOKABLE void updateFFTPlot();
+	Q_INVOKABLE void updateFFTPlot(int64_t pos);
 
 };
 #endif // MAINWINDOW_H
