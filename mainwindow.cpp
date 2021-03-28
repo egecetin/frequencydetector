@@ -196,6 +196,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 	channelLabel->setParent(menu);
 	channelBox->setParent(menu);
+	channelBox->addItem("0");
 	channelBoxLayout->addWidget(channelLabel, 6);
 	channelBoxLayout->addWidget(channelBox, 4);
 
@@ -355,17 +356,21 @@ MainWindow::MainWindow(QWidget *parent)
 	mainWidget->setLayout(mainHLayout);
 
 	// Connect functions
-	connect(selectButton, &QPushButton::pressed, this, &MainWindow::selectFile);
-	connect(plotButton, &QPushButton::pressed, this, [this]{ this->updatePlots(false); }, Qt::ConnectionType::QueuedConnection);
+	connect(selectButton, &QPushButton::pressed, this, [this] { this->selectFile(true); }, Qt::ConnectionType::QueuedConnection);
+	connect(plotButton, &QPushButton::pressed, this, [this] { this->selectFile(false); }, Qt::ConnectionType::QueuedConnection);
 	connect(playButton, &QPushButton::pressed, this, &MainWindow::playMedia);
 	connect(stopButton, &QPushButton::pressed, this, &MainWindow::stopMedia);
 	connect(backwardButton, &QPushButton::pressed, this, &MainWindow::backwardMedia);
 	connect(forwardButton, &QPushButton::pressed, this, &MainWindow::forwardMedia);
+	connect(wlenBox, &QComboBox::currentTextChanged, this, &MainWindow::wLenChanged);
+	connect(overlapBox, static_cast<void(QSpinBox::*)(int)>(QSpinBox::valueChanged), this, &MainWindow::overlapChanged);
+	connect(radioGroup, static_cast<void(QButtonGroup::*)(int)>(QButtonGroup::buttonClicked), this, &MainWindow::radioChange);
+
 
 	// Init processing with default values
-	double rFreq = 300.0 / 2048;
+	double rFreq[] = { 300.0 / 2048,0 };
 	windowFunctions = init_windows();
-	init_globalvar(4096, 8, 300 / M_PI, 3.5, 0.5, ippsHighPass, &rFreq, 16);
+	init_globalvar(4096, 8, 300 / M_PI, 3.5, 0.5, ippsHighPass, rFreq, 16);
 
 	// Last changes
 	// this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
@@ -405,6 +410,7 @@ void MainWindow::retranslateUi()
 	winTypeBox->addItem(QString("Bartlett"));
 
 	// Set defaults
+	channelBox->setCurrentIndex(0);
 	nwinBox->setValue(8);
 	winTypeBox->setCurrentIndex(0);
 	wlenBox->setCurrentIndex(3);
@@ -425,24 +431,30 @@ MainWindow::~MainWindow()
 	delete mainWidget;
 }
 
-void MainWindow::selectFile()
+void MainWindow::selectFile(bool flag)
 {
-	QString fileName = QFileDialog::getOpenFileName(this);
-	path->setText(fileName);
-	
+	QString fileName;
+	if (flag)
+	{
+		fileName = QFileDialog::getOpenFileName(this);
+		path->setText(fileName);
+
 #ifdef _WIN32
-	memset(filePath, '\0', FILENAME_MAX);
-	strcpy_s(filePath, FILENAME_MAX, fileName.toStdString().c_str());
+		memset(filePath, '\0', FILENAME_MAX);
+		strcpy_s(filePath, FILENAME_MAX, fileName.toStdString().c_str());
 #else
-	memset(filePath, '\0', PATH_MAX);
-	strcpy(filePath, fileName.toStdString().c_str());
+		memset(filePath, '\0', PATH_MAX);
+		strcpy(filePath, fileName.toStdString().c_str());
 #endif // WIN32
+	}	
 	
 	// Trigger processes
-	if (fileName.length())
+	if (fileName.length() || (!flag && this->filePath[0]))
 	{
 		this->disableButtons();
 		this->updateValues();
+		if (dialog)
+			delete dialog;
 		dialog = new QProgressDialog("Processing request...", "", 0, 100, this);
 		dialog->setWindowModality(Qt::WindowModality::WindowModal);
 		dialog->setCancelButton(nullptr);
@@ -452,7 +464,7 @@ void MainWindow::selectFile()
 		dialog->setVisible(true);
 		dialog->update();
 
-		std::thread th(&MainWindow::updatePlots, this, true);
+		std::thread th(&MainWindow::updatePlots, this, flag);
 		th.detach();
 	}
 }
@@ -615,6 +627,16 @@ Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
 
 void MainWindow::updateValues()
 {
+	windowLength = std::stoi(this->wlenBox->currentText().toStdString());
+	overlap = this->overlapBox->value();
+	nwin = this->nwinBox->value();
+	thresh_alpha = this->alphaBox->value();
+	thresh_inf = this->infBox->value();	
+	channelIdx = this->channelBox->currentIndex();
+	winIdx = this->wlenBox->currentIndex() * 5 + this->winTypeBox->currentIndex();
+
+	double rFreq[] = { this->lowFreqBox->value(), this->highFreqBox->value() };
+	init_globalvar(windowLength, nwin, rFreq[0] * windowLength / 2 / M_PI, thresh_alpha, thresh_inf, static_cast<IppFilterType>(radioGroup->checkedId()), rFreq, bits);
 }
 
 void MainWindow::playMedia()
@@ -765,6 +787,47 @@ void MainWindow::playerStateChanged(QAudio::State state)
 	}
 }
 
+void MainWindow::radioChange(int id)
+{
+	switch (radioGroup->checkedId())
+	{
+	case 0:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(false);
+		break;
+	case 1:
+		lowFreqBox->setEnabled(false);
+		highFreqBox->setEnabled(true);
+		break;
+	case 2:
+	case 3:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(true);
+		break;
+	default:
+		break;
+	}
+
+	this->update();
+}
+
+void MainWindow::wLenChanged(const QString &val)
+{
+	if (overlapBox->value() >= std::stoi(val.toStdString()))
+	{
+		overlapBox->setValue(std::stoi(val.toStdString()) / 2);
+	}
+	overlapBox->setMaximum(std::stoi(val.toStdString()) - 1);
+}
+
+void MainWindow::overlapChanged(int val)
+{
+	if (val >= std::stoi(wlenBox->currentText().toStdString()))
+	{
+		this->overlapBox->setValue(std::stoi(wlenBox->currentText().toStdString()) - 1);
+	}
+}
+
 void MainWindow::limitRange(QCustomPlot *plot, QCPRange *X, QCPRange *Y)
 {
 	if (plot->xAxis->range().lower < X->lower)
@@ -817,6 +880,12 @@ Q_INVOKABLE void MainWindow::enableButtons()
 	radio_high->setEnabled(true);
 	radio_pass->setEnabled(true);
 	radio_stop->setEnabled(true);
+
+
+	// Update channel number
+	this->channelBox->clear();
+	for (size_t idx = 0; idx < audio.data->nChannel; ++idx)
+		this->channelBox->addItem(std::to_string(idx).c_str());
 
 	this->update();
 }

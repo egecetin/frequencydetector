@@ -52,9 +52,9 @@ class MainWindow : public QMainWindow
 public:
 	/********* Variables *********/
 #ifdef _WIN32
-	char filePath[FILENAME_MAX];
+	char filePath[FILENAME_MAX] = { '\0' };
 #elif __linux__
-	char filePath[PATH_MAX];
+	char filePath[PATH_MAX] = { '\0' };
 #endif // WIN32
 
 	/********* Functions *********/
@@ -78,6 +78,8 @@ private:
 	int overlap = 2048;
 	int nwin = 8;
 	int bits = 16;
+	double thresh_alpha = 3.5;
+	double thresh_inf = 0.5;
 	QCPRange timeXAxes = QCPRange(0, 5);
 	QCPRange timeYAxes = QCPRange(0, 5);
 	QCPRange freqXAxes = QCPRange(0, 5);
@@ -164,7 +166,7 @@ private:
 	QHBoxLayout *playerButtonsBoxLayout;
 
 	/********* Functions *********/	
-	void selectFile();
+	void selectFile(bool flag = true);
 	void updateValues();
 
 	void playMedia();
@@ -174,6 +176,10 @@ private:
 
 	void playerSlider();
 	void playerStateChanged(QAudio::State state);
+
+	void radioChange(int id);
+	void wLenChanged(const QString &val);
+	void overlapChanged(int val);
 
 	void limitRange(QCustomPlot *plot, QCPRange *X, QCPRange *Y);
 
