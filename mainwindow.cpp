@@ -170,9 +170,10 @@ MainWindow::MainWindow(QWidget *parent)
 	fftPlot->yAxis->grid()->setPen(QPen(silver, 1, Qt::DotLine));
 	fftPlot->yAxis->grid()->setSubGridPen(QPen(dimgray, 1, Qt::DotLine));	
 	fftPlot->addGraph();
-	fftPlot->graph(0)->setPen(QPen(aquamarine));
+	fftPlot->graph(0)->setPen(QPen(darkorange));
 	fftPlot->addGraph();
-	fftPlot->graph(1)->setPen(QPen(darkorange));
+	fftPlot->graph(1)->setPen(QPen(aquamarine));
+	fftPlot->graph(1)->setBrush(QBrush(QColor(127, 255, 212, 40)));
 	fftPlot->addGraph();
 	fftPlot->graph(2)->setPen(QPen(lime));
 
@@ -359,10 +360,10 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(backwardButton, &QPushButton::pressed, this, &MainWindow::backwardMedia);
 	connect(forwardButton, &QPushButton::pressed, this, &MainWindow::forwardMedia);
 
-	// Init processing
+	// Init processing with default values
 	double rFreq = 200.0 / 2048;
 	windowFunctions = init_windows();
-	init_globalvar(4096, 8, 200, 3.5, 0.5, ippsHighPass, &rFreq, 16);
+	init_globalvar(4096, 8, 200 / M_PI, 3.5, 0.5, ippsHighPass, &rFreq, 16);
 
 	// Last changes
 	// this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
@@ -553,8 +554,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	}
 	detectPlot->xAxis->setRange(0, floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1);
 	detectPlot->yAxis->setRange(0, windowLength / 2 + 1);
-	QMetaObject::invokeMethod(this->detectPlot, "replot", Qt::ConnectionType::QueuedConnection);
-	
+	QMetaObject::invokeMethod(this->detectPlot, "replot", Qt::ConnectionType::QueuedConnection);	
 
 	this->updateFFTPlot(0);
 
