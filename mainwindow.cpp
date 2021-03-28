@@ -77,8 +77,8 @@ MainWindow::MainWindow(QWidget *parent)
 	spacer1 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 	spacer2 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
 	spacer3 = new QSpacerItem(20, 5, QSizePolicy::Expanding);
-	spacer4 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
-	spacer5 = new QSpacerItem(40, 20, QSizePolicy::Expanding);
+	spacer4 = new QSpacerItem(40, 20, QSizePolicy::Maximum);
+	spacer5 = new QSpacerItem(40, 20, QSizePolicy::Maximum);
 	
 	// Prepare left side plots
 	timePlot->setParent(mainWidget);
@@ -144,8 +144,7 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(detectPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->xAxis2, SLOT(setRange(QCPRange)));
 	connect(detectPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), detectPlot->yAxis2, SLOT(setRange(QCPRange)));
 	//connect(detectPlot, &QCustomPlot::beforeReplot, this, [this] { this->limitRange(detectPlot, &freqXAxes, &freqYAxes); });
-
-
+	
 	mainPlotLayout->addWidget(timePlot);
 	mainPlotLayout->addWidget(freqPlot);
 	mainPlotLayout->addWidget(detectPlot);
@@ -197,11 +196,17 @@ MainWindow::MainWindow(QWidget *parent)
 	channelLabel->setParent(menu);
 	channelBox->setParent(menu);
 	channelBox->addItem("0");
+	channelBox->setEditable(true);
+	channelBox->lineEdit()->setReadOnly(true);
+	channelBox->lineEdit()->setAlignment(Qt::AlignRight);
 	channelBoxLayout->addWidget(channelLabel, 6);
 	channelBoxLayout->addWidget(channelBox, 4);
 
 	winTypeLabel->setParent(menu);
 	winTypeBox->setParent(menu);
+	winTypeBox->setEditable(true);
+	winTypeBox->lineEdit()->setReadOnly(true);
+	winTypeBox->lineEdit()->setAlignment(Qt::AlignRight);
 	winTypeBoxLayout->addWidget(winTypeLabel, 6);
 	winTypeBoxLayout->addWidget(winTypeBox, 4);
 
@@ -216,6 +221,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 	wlenLabel->setParent(menu);
 	wlenBox->setParent(menu);
+	wlenBox->setEditable(true);
+	wlenBox->lineEdit()->setReadOnly(true);
+	wlenBox->lineEdit()->setAlignment(Qt::AlignRight);
 	wlenBoxLayout->addWidget(wlenLabel, 6);
 	wlenBoxLayout->addWidget(wlenBox, 4);
 
@@ -269,26 +277,22 @@ MainWindow::MainWindow(QWidget *parent)
 	radioMenu->setLayout(radioMenuLayout);
 
 	lowFreqLabel->setParent(menu);
-	//lowFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	lowFreqBox->setParent(menu);
 	lowFreqBox->setDecimals(4);
 	lowFreqBox->setSingleStep(0.0001);
 	lowFreqBox->setMinimum(0.0001);
 	lowFreqBox->setMaximum(1);
 	lowFreqBox->setAlignment(Qt::AlignRight);
-	//lowFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
 	lowFreqBoxLayout->addWidget(lowFreqLabel);
 	lowFreqBoxLayout->addWidget(lowFreqBox);
 
 	highFreqLabel->setParent(menu);
-	//highFreqLabel->setStyleSheet("color: rgb(192, 192, 192)");
 	highFreqBox->setParent(menu);
 	highFreqBox->setDecimals(4);
 	highFreqBox->setSingleStep(0.0001);
 	highFreqBox->setMinimum(0.0001);
 	highFreqBox->setMaximum(1);
 	highFreqBox->setAlignment(Qt::AlignRight);
-	//highFreqBox->setStyleSheet("color: rgb(192, 192, 192)");
 	highFreqBoxLayout->addWidget(highFreqLabel);
 	highFreqBoxLayout->addWidget(highFreqBox);
 
@@ -595,12 +599,12 @@ Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
 	double *out = estimate_freq_local(&(audio.data->channelData[channelIdx][startPos]), windowFunctions[winIdx], &n, windowLength - overlap, values, th_values);
 
 	// Take the logarithm
-	ippsAddC_64f_I(0.0001, values, fBuffLen);
+	ippsAddC_64f_I(1e-14, values, fBuffLen);
 	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, values, 1);
 	vdLog10(fBuffLen, values, values);
 	indx = cblas_idamax(fBuffLen, values, 1);
 
-	ippsAddC_64f_I(0.0001, th_values, fBuffLen);
+	ippsAddC_64f_I(1e-14, th_values, fBuffLen);
 	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, th_values, 1);
 	vdLog10(fBuffLen, th_values, th_values);
 
