@@ -77,6 +77,7 @@ private:
 	int windowLength = 4096;
 	int overlap = 2048;
 	int nwin = 8;
+	int bits = 16;
 	QCPRange timeXAxes = QCPRange(0, 5);
 	QCPRange timeYAxes = QCPRange(0, 5);
 	QCPRange freqXAxes = QCPRange(0, 5);

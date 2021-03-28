@@ -176,6 +176,8 @@ MainWindow::MainWindow(QWidget *parent)
 	fftPlot->graph(1)->setBrush(QBrush(QColor(127, 255, 212, 40)));
 	fftPlot->addGraph();
 	fftPlot->graph(2)->setPen(QPen(lime));
+	fftPlot->graph(2)->setLineStyle(QCPGraph::lsNone);
+	fftPlot->graph(2)->setScatterStyle(QCPScatterStyle::ssStar);
 
 	line->setLineWidth(2);
 	line->setFrameShadow(QFrame::Sunken);
@@ -361,9 +363,9 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(forwardButton, &QPushButton::pressed, this, &MainWindow::forwardMedia);
 
 	// Init processing with default values
-	double rFreq = 200.0 / 2048;
+	double rFreq = 300.0 / 2048;
 	windowFunctions = init_windows();
-	init_globalvar(4096, 8, 200 / M_PI, 3.5, 0.5, ippsHighPass, &rFreq, 16);
+	init_globalvar(4096, 8, 300 / M_PI, 3.5, 0.5, ippsHighPass, &rFreq, 16);
 
 	// Last changes
 	// this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
@@ -411,7 +413,7 @@ void MainWindow::retranslateUi()
 	alphaBox->setValue(3.5);
 	radio_high->setChecked(true);
 	lowFreqBox->setEnabled(true);
-	lowFreqBox->setValue(200.0 / 2048);
+	lowFreqBox->setValue(300.0 / 2048);
 	highFreqBox->setValue(0.98);
 	highFreqBox->setEnabled(false);
 
@@ -473,7 +475,6 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	}
 
 	if (spectrogramData) { // Clear previous data
-#pragma omp simd
 		for (int i = 0; i < outputLength; ++i) {
 			MKL_free(spectrogramData[i]);
 			MKL_free(alarmsData[i]);
@@ -483,7 +484,7 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 		MKL_free(spectrogramData);
 	}
 
-	int bits = 0;
+	bits = 0;
 	if (reader.codecContexts[streamIdx]->bits_per_raw_sample)
 		bits = reader.codecContexts[streamIdx]->bits_per_raw_sample;
 	else if (reader.codecContexts[streamIdx]->bits_per_coded_sample)
@@ -527,7 +528,6 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 	for (size_t idx = 0; idx < floor((audio.data->dataLen - windowLength) / (windowLength - overlap)) + 1; ++idx)
 	{
 		double *ptr = spectrogramData[idx];
-#pragma omp simd
 		for (size_t jdx = 0; jdx < windowLength / 2 + 1; ++jdx)
 		{
 			freqMap->data()->setCell(idx, jdx, ptr[jdx]);
@@ -572,14 +572,25 @@ Q_INVOKABLE void MainWindow::updatePlots(bool flag)
 
 Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
 {	
+	size_t indx = 0;
 	int n = 0;
 	double *values = (double*)MKL_calloc(fBuffLen, sizeof(double), 64);
 	double *th_values = (double*)MKL_calloc(fBuffLen, sizeof(double), 64);
-	int64_t startPos = int64_t(pos / (windowLength - overlap) - nwin) * (windowLength - overlap);
+	int64_t startPos = int64_t(pos / (windowLength - overlap) - nwin - 1) * (windowLength - overlap);
 	if (startPos < 0)
 		startPos = 0;
 
 	double *out = estimate_freq_local(&(audio.data->channelData[channelIdx][startPos]), windowFunctions[winIdx], &n, windowLength - overlap, values, th_values);
+
+	// Take the logarithm
+	ippsAddC_64f_I(0.0001, values, fBuffLen);
+	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, values, 1);
+	vdLog10(fBuffLen, values, values);
+	indx = cblas_idamax(fBuffLen, values, 1);
+
+	ippsAddC_64f_I(0.0001, th_values, fBuffLen);
+	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, th_values, 1);
+	vdLog10(fBuffLen, th_values, th_values);
 
 	// Set all values
 	double *x = (double*)malloc(sizeof(double) * fBuffLen);
@@ -589,17 +600,17 @@ Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
 	QVector<double> vX(x, &x[fBuffLen]);
 	QVector<double> vY(values, &values[fBuffLen]);
 	fftPlot->graph(0)->setData(vX, vY, true);
+	fftPlot->xAxis->setRange(0, fBuffLen);
+	fftPlot->yAxis->setRange(-round(-(values[indx] / 10 - 1)) * 5, 0);
 
 	// Set threshold values
 	vY = QVector<double>(th_values, &th_values[fBuffLen]);
 	fftPlot->graph(1)->setData(vX, vY, true);
 
 	// Mark estimated values
-	//fftPlot->graph(2)->setData();
-	
-	fftPlot->rescaleAxes();
-	QMetaObject::invokeMethod(this->fftPlot, "replot", Qt::ConnectionType::QueuedConnection);
+	//fftPlot->graph(2)->setData();	
 
+	QMetaObject::invokeMethod(this->fftPlot, "replot", Qt::ConnectionType::QueuedConnection);
 }
 
 void MainWindow::updateValues()
@@ -728,6 +739,7 @@ void MainWindow::playerSlider()
 {
 	infLine->point1->setCoords(audioBuff->pos() / sizeof(float), 0);
 	infLine->point2->setCoords(audioBuff->pos() / sizeof(float), 1);
+	updateFFTPlot(audioBuff->pos() / sizeof(float));
 	QMetaObject::invokeMethod(this->timePlot, "replot", Qt::ConnectionType::QueuedConnection);
 }
 

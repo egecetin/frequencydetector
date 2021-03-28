@@ -21375,10 +21375,10 @@ QPointF QCPGraph::getFillBasePoint(QPointF matchingDataPoint) const
     if (keyAxis->orientation() == Qt::Horizontal)
     {
       result.setX(matchingDataPoint.x());
-      result.setY(valueAxis->coordToPixel(0));
+      result.setY(valueAxis->coordToPixel(valueAxis->range().lower));
     } else // keyAxis->orientation() == Qt::Vertical
     {
-      result.setX(valueAxis->coordToPixel(0));
+      result.setX(valueAxis->coordToPixel(valueAxis->range().lower));
       result.setY(matchingDataPoint.y());
     }
   } else // valueAxis->mScaleType == QCPAxis::stLogarithmic
