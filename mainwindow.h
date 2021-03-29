@@ -22,7 +22,7 @@
 #include <qframe.h>
 
 // UI Colors
-#define dark QColor(25, 35, 45)
+#define dark QColor(41, 43, 44)
 #define silver QColor(192, 192, 192)
 #define dimgray QColor(105, 105, 105)
 
