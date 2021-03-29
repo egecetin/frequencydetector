@@ -257,10 +257,10 @@ MainWindow::MainWindow(QWidget *parent)
 	alphaBoxLayout->addWidget(alphaBox, 4);
 
 	radioGroup->setParent(radioMenu);
-	radio_high->setParent(radioMenu);
-	radioGroup->addButton(radio_high, 0);
 	radio_low->setParent(radioMenu);
-	radioGroup->addButton(radio_low, 1);
+	radioGroup->addButton(radio_low, 0);
+	radio_high->setParent(radioMenu);
+	radioGroup->addButton(radio_high, 1);
 	radio_pass->setParent(radioMenu);
 	radioGroup->addButton(radio_pass, 2);
 	radio_stop->setParent(radioMenu);
@@ -270,8 +270,8 @@ MainWindow::MainWindow(QWidget *parent)
 	radioMenu->setLineWidth(2);
 	radioMenu->setFrameShadow(QFrame::Sunken);
 	radioMenu->setFrameShape(QFrame::Box);
-	radioMenuLayout->addWidget(radio_high);
 	radioMenuLayout->addWidget(radio_low);
+	radioMenuLayout->addWidget(radio_high);
 	radioMenuLayout->addWidget(radio_pass);
 	radioMenuLayout->addWidget(radio_stop);
 	radioMenu->setLayout(radioMenuLayout);
@@ -377,7 +377,6 @@ MainWindow::MainWindow(QWidget *parent)
 	init_globalvar(4096, 8, 300 / M_PI, 3.5, 0.5, ippsHighPass, rFreq, 16);
 
 	// Last changes
-	// this->setStyleSheet("background-color: rgb(41,43,44);");	// Dark
 	this->setCentralWidget(mainWidget);
 	this->resize(QGuiApplication::primaryScreen()->geometry().width() / 1.3, QGuiApplication::primaryScreen()->geometry().height() / 1.3);
 	this->retranslateUi();
@@ -600,12 +599,12 @@ Q_INVOKABLE void MainWindow::updateFFTPlot(int64_t pos)
 
 	// Take the logarithm
 	ippsAddC_64f_I(1e-14, values, fBuffLen);
-	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, values, 1);
+	cblas_dscal(fBuffLen, pow(2, -bits) / nwin, values, 1);
 	vdLog10(fBuffLen, values, values);
 	indx = cblas_idamax(fBuffLen, values, 1);
 
 	ippsAddC_64f_I(1e-14, th_values, fBuffLen);
-	cblas_dscal(fBuffLen, pow(2, -bits + 2) / nwin, th_values, 1);
+	cblas_dscal(fBuffLen, pow(2, -bits) / nwin, th_values, 1);
 	vdLog10(fBuffLen, th_values, th_values);
 
 	// Set all values
@@ -796,12 +795,12 @@ void MainWindow::radioChange(int id)
 	switch (radioGroup->checkedId())
 	{
 	case 0:
-		lowFreqBox->setEnabled(true);
-		highFreqBox->setEnabled(false);
-		break;
-	case 1:
 		lowFreqBox->setEnabled(false);
 		highFreqBox->setEnabled(true);
+		break;
+	case 1:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(false);
 		break;
 	case 2:
 	case 3:
@@ -861,12 +860,12 @@ Q_INVOKABLE void MainWindow::enableButtons()
 	switch (radioGroup->checkedId())
 	{
 	case 0:
-		lowFreqBox->setEnabled(true);
-		highFreqBox->setEnabled(false);
-		break;
-	case 1:
 		lowFreqBox->setEnabled(false);
 		highFreqBox->setEnabled(true);
+		break;
+	case 1:
+		lowFreqBox->setEnabled(true);
+		highFreqBox->setEnabled(false);
 		break;
 	case 2:
 	case 3:
@@ -890,6 +889,9 @@ Q_INVOKABLE void MainWindow::enableButtons()
 	this->channelBox->clear();
 	for (size_t idx = 0; idx < audio.data->nChannel; ++idx)
 		this->channelBox->addItem(std::to_string(idx).c_str());
+
+	if (this->dialog)
+		this->dialog->setValue(100);
 
 	this->update();
 }

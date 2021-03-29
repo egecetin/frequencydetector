@@ -377,7 +377,7 @@ ERR_STATUS spectrogram(double* data, int dataLen, double*** output, double* wind
 				continue;
 			}
 
-			cblas_dscal(wlen / 2 + 1, pow(2, -bits + 2), out[i], 1); // Normalize
+			cblas_dscal(wlen / 2 + 1, pow(2, -bits), out[i], 1); // Normalize
 			vdLog10(wlen / 2 + 1, out[i], out[i]); // Log
 			if (status_local = vmlGetErrStatus(), status_local) {
 				#pragma omp critical
