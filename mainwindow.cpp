@@ -644,120 +644,133 @@ void MainWindow::updateValues()
 
 void MainWindow::playMedia()
 {
-	switch (audioDev->state())
+	if (this->filePath[0])
 	{
-	case QAudio::State::ActiveState:
-	{
-		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-		audioDev->suspend();
+		switch (audioDev->state())
+		{
+		case QAudio::State::ActiveState:
+		{
+			playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+			audioDev->suspend();
 
-		playButton->update();
-		break;
+			playButton->update();
+			break;
+		}
+		case QAudio::State::SuspendedState:
+			playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+			audioDev->resume();
+			playButton->update();
+			break;
+		case QAudio::State::StoppedState:
+		case QAudio::State::IdleState:
+		{
+			// Prepare audio output device
+			QAudioFormat format;
+			format.setSampleRate(audio.data->samplingFreq);
+			format.setChannelCount(1);
+			format.setSampleSize(32);
+			format.setCodec("audio/pcm");
+			format.setByteOrder(QAudioFormat::LittleEndian);
+			format.setSampleType(QAudioFormat::SampleType::Float);
+
+			if (audioDev)
+			{
+				delete audioDev;
+				audioDev = nullptr;
+			}
+			if (audioBuff)
+			{
+				delete audioBuff;
+				audioBuff = nullptr;
+			}
+
+			audioBuff = new QBuffer;
+
+			QAudioDeviceInfo deviceInfo(QAudioDeviceInfo::defaultOutputDevice());
+			if (!deviceInfo.isFormatSupported(format))
+			{
+				QMessageBox::warning(this, tr("Warning"), tr("Format is not supported. Trying with nearest format!"));
+				format = deviceInfo.nearestFormat(format);
+			}
+
+			audioDev = new QAudioOutput(deviceInfo, format);
+			if (audioDev->error() != QAudio::NoError)
+			{
+				QMessageBox::critical(this, tr("Error"), tr("Cant access the audio device!"));
+			}
+			audioDev->setVolume(0.75);
+			audioDev->setNotifyInterval(100);
+			connect(audioDev, &QAudioOutput::notify, this, &MainWindow::playerSlider, Qt::ConnectionType::QueuedConnection);
+			connect(audioDev, &QAudioOutput::stateChanged, this, &MainWindow::playerStateChanged, Qt::ConnectionType::QueuedConnection);
+
+			// Prepare data
+			double max_val = 0;
+			float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
+
+			// Find absolute max
+			size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
+			max_val = abs(audio.data->channelData[channelIdx][ind1]);
+
+			// Change precision and scale
+			ippsConvert_64f32f(audio.data->channelData[channelIdx], arrBuff, audio.data->dataLen);
+			cblas_sscal(audio.data->dataLen, 1.0 / max_val, arrBuff, 1);
+
+			// Set buffer
+			QByteArray bArr = QByteArray((char*)arrBuff, audio.data->dataLen * sizeof(float));
+			audioBuff->setData(bArr);
+			audioBuff->open(QBuffer::ReadOnly);
+
+			free(arrBuff);
+
+			// Start audio and update gui
+			playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+			audioDev->start(audioBuff);
+			playButton->update();
+			break;
+		}
+		case QAudio::State::InterruptedState:
+			QMessageBox::warning(this, tr("Warning"), tr("Another process has control of device!"));
+			break;
+		default:
+			QMessageBox::critical(this, tr("Error"), tr("Unknown audio device state!"));
+			break;
+		}
 	}
-	case QAudio::State::SuspendedState:
-		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-		audioDev->resume();
-		playButton->update();
-		break;
-	case QAudio::State::StoppedState:
-	case QAudio::State::IdleState:
-	{
-		// Prepare audio output device
-		QAudioFormat format;
-		format.setSampleRate(audio.data->samplingFreq);
-		format.setChannelCount(1);
-		format.setSampleSize(32);
-		format.setCodec("audio/pcm");
-		format.setByteOrder(QAudioFormat::LittleEndian);
-		format.setSampleType(QAudioFormat::SampleType::Float);
-
-		if (audioDev)
-		{
-			delete audioDev;
-			audioDev = nullptr;
-		}
-		if (audioBuff)
-		{
-			delete audioBuff;
-			audioBuff = nullptr;
-		}
-
-		audioBuff = new QBuffer;
-
-		QAudioDeviceInfo deviceInfo(QAudioDeviceInfo::defaultOutputDevice());
-		if (!deviceInfo.isFormatSupported(format))
-		{
-			QMessageBox::warning(this, tr("Warning"), tr("Format is not supported. Trying with nearest format!"));
-			format = deviceInfo.nearestFormat(format);
-		}
-
-		audioDev = new QAudioOutput(deviceInfo, format);
-		if (audioDev->error() != QAudio::NoError)
-		{
-			QMessageBox::critical(this, tr("Error"), tr("Cant access the audio device!"));
-		}
-		audioDev->setVolume(0.75);
-		audioDev->setNotifyInterval(100);
-		connect(audioDev, &QAudioOutput::notify, this, &MainWindow::playerSlider, Qt::ConnectionType::QueuedConnection);
-		connect(audioDev, &QAudioOutput::stateChanged, this, &MainWindow::playerStateChanged, Qt::ConnectionType::QueuedConnection);
-		
-		// Prepare data
-		double max_val = 0;
-		float *arrBuff = (float*)malloc(audio.data->dataLen * sizeof(float));
-
-		// Find absolute max
-		size_t ind1 = cblas_idamax(audio.data->dataLen, audio.data->channelData[channelIdx], 1);
-		max_val = abs(audio.data->channelData[channelIdx][ind1]);
-
-		// Change precision and scale
-		ippsConvert_64f32f(audio.data->channelData[channelIdx], arrBuff, audio.data->dataLen);
-		cblas_sscal(audio.data->dataLen, 1.0 / max_val, arrBuff, 1);
-
-		// Set buffer
-		QByteArray bArr = QByteArray((char*)arrBuff, audio.data->dataLen * sizeof(float));
-		audioBuff->setData(bArr);
-		audioBuff->open(QBuffer::ReadOnly);
-
-		free(arrBuff);
-
-		// Start audio and update gui
-		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-		audioDev->start(audioBuff);
-		playButton->update();
-		break;
-	}
-	case QAudio::State::InterruptedState:
-		QMessageBox::warning(this, tr("Warning"), tr("Another process has control of device!"));
-		break;	
-	default:
-		QMessageBox::critical(this, tr("Error"), tr("Unknown audio device state!"));
-		break;
-	}
+	
 }
 
 void MainWindow::stopMedia()
 {
-	playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-	audioDev->stop();
-	playButton->update();
+	if (this->filePath[0])
+	{
+		playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+		audioDev->stop();
+		playButton->update();
+	}
 }
 
 void MainWindow::backwardMedia()
 {
-	int64_t pos = audioBuff->pos() - this->audio.data->samplingFreq * 5 * sizeof(float);
-	if (pos < 0)
-		audioBuff->seek(0);
-	else
-		audioBuff->seek(pos);
+	if (this->filePath[0])
+	{
+		int64_t pos = audioBuff->pos() - this->audio.data->samplingFreq * 5 * sizeof(float);
+		if (pos < 0)
+			audioBuff->seek(0);
+		else
+			audioBuff->seek(pos);
+	}
 }
 
 void MainWindow::forwardMedia()
 {
-	int64_t pos = audioBuff->pos() + this->audio.data->samplingFreq * 5 * sizeof(float);
-	if (pos > audioBuff->size())
-		audioBuff->seek(audioBuff->size());
-	else
-		audioBuff->seek(pos);
+	if (this->filePath[0])
+	{
+		int64_t pos = audioBuff->pos() + this->audio.data->samplingFreq * 5 * sizeof(float);
+		if (pos > audioBuff->size())
+			audioBuff->seek(audioBuff->size());
+		else
+			audioBuff->seek(pos);
+	}
 }
 
 void MainWindow::playerSlider()

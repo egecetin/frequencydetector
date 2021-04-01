@@ -8,6 +8,9 @@ int main(int argc, char *argv[])
 
     QApplication a(argc, argv);
 
+	// Setup GUI
+	a.setWindowIcon(QIcon("app.ico"));
+
 	// Set stylesheet
 	QFile f("qdarkstyle/style.qss");
 	if (!f.exists()) {
@@ -21,5 +24,6 @@ int main(int argc, char *argv[])
 	
 	MainWindow w;
     w.show();
+
     return a.exec();
 }
