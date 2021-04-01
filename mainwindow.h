@@ -180,6 +180,8 @@ private:
 	void radioChange(int id);
 	void wLenChanged(const QString &val);
 	void overlapChanged(int val);
+	void cutLowFreqChange(double val);
+	void cutHighFreqChange(double val);
 
 	void limitRange(QCustomPlot *plot, QCPRange *X, QCPRange *Y);
 

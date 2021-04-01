@@ -281,7 +281,7 @@ MainWindow::MainWindow(QWidget *parent)
 	lowFreqBox->setDecimals(4);
 	lowFreqBox->setSingleStep(0.0001);
 	lowFreqBox->setMinimum(0.0001);
-	lowFreqBox->setMaximum(1);
+	lowFreqBox->setMaximum(0.5);
 	lowFreqBox->setAlignment(Qt::AlignRight);
 	lowFreqBoxLayout->addWidget(lowFreqLabel);
 	lowFreqBoxLayout->addWidget(lowFreqBox);
@@ -291,7 +291,7 @@ MainWindow::MainWindow(QWidget *parent)
 	highFreqBox->setDecimals(4);
 	highFreqBox->setSingleStep(0.0001);
 	highFreqBox->setMinimum(0.0001);
-	highFreqBox->setMaximum(1);
+	highFreqBox->setMaximum(0.5);
 	highFreqBox->setAlignment(Qt::AlignRight);
 	highFreqBoxLayout->addWidget(highFreqLabel);
 	highFreqBoxLayout->addWidget(highFreqBox);
@@ -369,7 +369,8 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(wlenBox, &QComboBox::currentTextChanged, this, &MainWindow::wLenChanged);
 	connect(overlapBox, static_cast<void(QSpinBox::*)(int)>(QSpinBox::valueChanged), this, &MainWindow::overlapChanged);
 	connect(radioGroup, static_cast<void(QButtonGroup::*)(int)>(QButtonGroup::buttonClicked), this, &MainWindow::radioChange);
-
+	connect(lowFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutLowFreqChange);
+	connect(highFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutHighFreqChange);
 
 	// Init processing with default values
 	double rFreq[] = { 300.0 / 2048,0 };
@@ -423,7 +424,7 @@ void MainWindow::retranslateUi()
 	radio_high->setChecked(true);
 	lowFreqBox->setEnabled(true);
 	lowFreqBox->setValue(300.0 / 2048);
-	highFreqBox->setValue(0.98);
+	highFreqBox->setValue(0.48);
 	highFreqBox->setEnabled(false);
 
 	this->setWindowTitle(tr("Frequency Detector"));
@@ -841,6 +842,22 @@ void MainWindow::overlapChanged(int val)
 	if (val >= std::stoi(wlenBox->currentText().toStdString()))
 	{
 		this->overlapBox->setValue(std::stoi(wlenBox->currentText().toStdString()) - 1);
+	}
+}
+
+void MainWindow::cutLowFreqChange(double val)
+{
+	if (this->highFreqBox->value() > val)
+	{
+		this->lowFreqBox->setValue(val - 0.01);
+	}
+}
+
+void MainWindow::cutHighFreqChange(double val)
+{
+	if (this->lowFreqBox->value() > val)
+	{
+		this->highFreqBox->setValue(val + 0.01);
 	}
 }
 
