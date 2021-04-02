@@ -14,7 +14,6 @@
 * [Mathematical Expressions](#mathematical-expressions)
 * [Supported Formats](#supported-formats)
 * [Interface](#interface)
-* [To Do](#to-do)
 
 ## General Info
 
@@ -40,7 +39,3 @@ Binary file support will be added in later stages of development.
 ## Interface
 
 Still under development...
-
-## To Do
-
-I'm planning to develop a STM32 version of this algorithm.
