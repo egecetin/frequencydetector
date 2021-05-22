@@ -533,7 +533,6 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 	if (currentSize < desiredSize) { // Initialization
 
 		cblas_dcopy(fBuffLen * 2, data, 1, buff, 1);		// Copy data to buffer
-		ippsFIRSR_64f(buff, buff, fBuffLen * 2, pSpec, NULL, NULL, pBuffer);
 		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
 
 		cblas_dcopy(fBuffLen, freqBuff, 1, *position, 1);	// Copy data to vector
@@ -552,7 +551,6 @@ double* estimate_freq(double *data, double *window, IppsFIRSpec_64f *pSpec, Ipp8
 		double *out = thresholding(sumBuffer, fBuffLen, lagLen, threshold_alpha, thresh_influence, size, th_values);
 
 		cblas_dcopy(fBuffLen * 2, data, 1, buff, 1);		// Copy data to buffer
-		ippsFIRSR_64f(buff, buff, fBuffLen * 2, pSpec, NULL, NULL, pBuffer);
 		freqBuff = calculateFFT_MKL(buff, window, fBuffLen * 2, fft);
 		
 		vdSub(fBuffLen, sumBuffer, *position, sumBuffer);	// Subtract old data from sum
@@ -603,24 +601,31 @@ ERR_STATUS processFile(AudioData *audio, int streamIdx, int channelIdx, Ipp64f* 
 	int outLen = floor((dataLen - wlen) / (shift)) + 1;
 	int pos = 0, k = 0;
 
-	status = spectrogram(ptr, dataLen, spectrogramData, window, wlen, overlap, bits);
+	double *ptrCopy = (double*)MKL_malloc(dataLen * sizeof(double), 64);
+	if (!ptrCopy)
+		return ippStsMemAllocErr;
+	cblas_dcopy(dataLen, ptr, 1, ptrCopy, 1);
+	ippsFIRSR_64f(ptrCopy, ptrCopy, dataLen, filterSpec, NULL, NULL, filterBuffer);
+
+	status = spectrogram(ptrCopy, dataLen, spectrogramData, window, wlen, overlap, bits);
 	if (status)
 		return status;
 
 	*alarmData = (double**)MKL_malloc(outLen * sizeof(double*), 64);
 	*alarmLengths = (int*)MKL_malloc(outLen * sizeof(int), 64);
 
-	if (!(alarmData && alarmLengths)) {
+	if (!(alarmData && alarmLengths && ptrCopy)) {
 		MKL_free(alarmData); alarmData = NULL;
 		MKL_free(alarmLengths); alarmLengths = NULL;
 		return ippStsMemAllocErr;
 	}
 
 	while (k < outLen) {
-		(*alarmData)[k] = estimate_freq(&ptr[pos], window, filterSpec, filterBuffer, &((*alarmLengths)[k]), NULL);
+		(*alarmData)[k] = estimate_freq(&ptrCopy[pos], window, filterSpec, filterBuffer, &((*alarmLengths)[k]), NULL);
 		pos += shift;
 		++k;
 	}
+	MKL_free(ptrCopy);
 
 	*outputLength = outLen;
 	return status;

@@ -369,8 +369,8 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(wlenBox, &QComboBox::currentTextChanged, this, &MainWindow::wLenChanged);
 	connect(overlapBox, static_cast<void(QSpinBox::*)(int)>(QSpinBox::valueChanged), this, &MainWindow::overlapChanged);
 	connect(radioGroup, static_cast<void(QButtonGroup::*)(int)>(QButtonGroup::buttonClicked), this, &MainWindow::radioChange);
-	connect(lowFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutLowFreqChange);
-	connect(highFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutHighFreqChange);
+	//connect(lowFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutLowFreqChange);
+	//connect(highFreqBox, static_cast<void(QDoubleSpinBox::*)(double)>(QDoubleSpinBox::valueChanged), this, &MainWindow::cutHighFreqChange);
 
 	// Init processing with default values
 	double rFreq[] = { 300.0 / 2048,0 };
